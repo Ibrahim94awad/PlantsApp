@@ -37,9 +37,14 @@ data class InventoryFilter(val plantId: Long? = null, val departmentId: Long? = 
 }
 @Database(entities=[Plant::class,Department::class,Line::class,Size::class,InventoryRecord::class],version=2,exportSchema=true)
 abstract class PlantDatabase:RoomDatabase(){ abstract fun inventory():InventoryDao; abstract fun master():MasterDao
- companion object { fun open(context:Context)=Room.databaseBuilder(context,PlantDatabase::class.java,"plantregistratie.db").addMigrations(object:Migration(1,2){override fun migrate(db:SupportSQLiteDatabase){db.execSQL("CREATE INDEX IF NOT EXISTS index_inventory_records_plantId ON inventory_records(plantId)")}}).addCallback(object:Callback(){override fun onCreate(db:SupportSQLiteDatabase){ super.onCreate(db)
-     context.assets.open("plants.csv").bufferedReader().useLines { rows -> rows.drop(1).map(String::trim).filter(String::isNotEmpty).forEach { name -> db.execSQL("INSERT OR IGNORE INTO plants(name,createdAt,updatedAt) VALUES(?,?,?)", arrayOf(name.removeSurrounding("\""),now(),now())) } }
-     context.assets.open("departments.txt").bufferedReader().useLines { it.map(String::trim).filter(String::isNotEmpty).forEach { name -> db.execSQL("INSERT OR IGNORE INTO departments(name,createdAt,updatedAt) VALUES(?,?,?)", arrayOf(name,now(),now())) } }
-     (1..50).forEach { number -> db.execSQL("INSERT INTO lines(name,departmentId,createdAt,updatedAt) VALUES(?,?,?,?)", arrayOf("Lijn $number", null, now(), now())) }
-     listOf("1L" to 250,"2L" to 150,"5L" to 80).forEach { (name,quantity) -> db.execSQL("INSERT OR IGNORE INTO sizes(name,defaultQuantity,createdAt,updatedAt) VALUES(?,?,?,?)",arrayOf(name,quantity,now(),now())) }
- } }).build() } }
+ companion object {
+  private fun count(db:SupportSQLiteDatabase,table:String)=db.query("SELECT COUNT(*) FROM $table").use{if(it.moveToFirst())it.getInt(0)else 0}
+  private fun seed(db:SupportSQLiteDatabase,context:Context){
+   if(count(db,"plants")==0)context.assets.open("plants.csv").bufferedReader().useLines { rows -> rows.drop(1).map(String::trim).filter(String::isNotEmpty).forEach { name -> db.execSQL("INSERT OR IGNORE INTO plants(name,createdAt,updatedAt) VALUES(?,?,?)",arrayOf(name.removeSurrounding("\""),now(),now())) } }
+   if(count(db,"departments")==0)context.assets.open("departments.txt").bufferedReader().useLines { rows -> rows.map(String::trim).filter(String::isNotEmpty).forEach { name -> db.execSQL("INSERT OR IGNORE INTO departments(name,createdAt,updatedAt) VALUES(?,?,?)",arrayOf(name,now(),now())) } }
+   if(count(db,"lines")==0)(1..50).forEach { number -> db.execSQL("INSERT INTO lines(name,departmentId,createdAt,updatedAt) VALUES(?,?,?,?)",arrayOf("Lijn $number",null,now(),now())) }
+   if(count(db,"sizes")==0)listOf("1L" to 250,"2L" to 150,"5L" to 80).forEach { (name,quantity) -> db.execSQL("INSERT OR IGNORE INTO sizes(name,defaultQuantity,createdAt,updatedAt) VALUES(?,?,?,?)",arrayOf(name,quantity,now(),now())) }
+  }
+  fun open(context:Context)=Room.databaseBuilder(context,PlantDatabase::class.java,"plantregistratie.db").addMigrations(object:Migration(1,2){override fun migrate(db:SupportSQLiteDatabase){db.execSQL("CREATE INDEX IF NOT EXISTS index_inventory_records_plantId ON inventory_records(plantId)")}}).addCallback(object:Callback(){override fun onCreate(db:SupportSQLiteDatabase){super.onCreate(db);seed(db,context)};override fun onOpen(db:SupportSQLiteDatabase){super.onOpen(db);seed(db,context)}}).build()
+ }
+}
