@@ -1,0 +1,67 @@
+package nl.plantenkwekerij.registratie
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import nl.plantenkwekerij.registratie.data.*
+import java.text.SimpleDateFormat
+import java.util.*
+
+class MainActivity: ComponentActivity() { override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); val db=PlantDatabase.open(applicationContext); setContent { MaterialTheme { App(ViewModelProvider(this, Factory(db))[InventoryViewModel::class.java]) } } }
+private class Factory(private val db:PlantDatabase):ViewModelProvider.Factory { override fun <T:ViewModel> create(c:Class<T>):T { @Suppress("UNCHECKED_CAST") return InventoryViewModel(db) as T } }
+
+class InventoryViewModel(private val db:PlantDatabase):ViewModel() {
+ private val inventory=db.inventory(); private val master=db.master(); val search=MutableStateFlow(""); val filters=MutableStateFlow(InventoryFilter())
+ val rows=combine(search.debounce(200),filters){s,f->s to f}.flatMapLatest{(s,f)->inventory.rows(s,f.plantId,f.departmentId,f.lineId,f.sizeId)}.stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),emptyList())
+ val plants=master.plants().stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),emptyList()); val departments=master.departments().stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),emptyList()); val lines=master.lines().stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),emptyList()); val sizes=master.sizes().stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),emptyList())
+ fun save(old:InventoryRecord?,plant:Long,department:Long,line:Long,size:Long,quantity:Int){viewModelScope.launch { if(old==null) inventory.insert(InventoryRecord(plantId=plant,departmentId=department,lineId=line,sizeId=size,quantity=quantity)) else inventory.update(old.copy(plantId=plant,departmentId=department,lineId=line,sizeId=size,quantity=quantity,updatedAt=System.currentTimeMillis())) }}
+ fun load(id:Long, done:(InventoryRecord)->Unit){viewModelScope.launch { inventory.record(id)?.let(done) }}; fun delete(id:Long){viewModelScope.launch{inventory.record(id)?.let{inventory.delete(it)}}}
+ fun add(type:String,name:String,quantity:Int=0){viewModelScope.launch { when(type){"Planten"->master.addPlant(Plant(name=name)); "Afdelingen"->master.addDepartment(Department(name=name)); "Lijnen"->master.addLine(Line(name=name)); "Maten"->master.addSize(Size(name=name,defaultQuantity=quantity))} }}
+ fun edit(type:String,id:Long,name:String,quantity:Int=0){viewModelScope.launch { val stamp=System.currentTimeMillis(); when(type){"Planten"->master.updatePlant(Plant(id,name,updatedAt=stamp)); "Afdelingen"->master.updateDepartment(Department(id,name,updatedAt=stamp)); "Lijnen"->master.updateLine(Line(id,name,updatedAt=stamp)); "Maten"->master.updateSize(Size(id,name,quantity,updatedAt=stamp))} }}
+ fun deleteMaster(type:String,id:Long,onUsed:()->Unit){viewModelScope.launch { val used=when(type){"Planten"->inventory.plantUsage(id);"Afdelingen"->inventory.departmentUsage(id);"Lijnen"->inventory.lineUsage(id);else->inventory.sizeUsage(id)}; if(used>0)onUsed() else when(type){"Planten"->master.deletePlant(Plant(id,""));"Afdelingen"->master.deleteDepartment(Department(id,""));"Lijnen"->master.deleteLine(Line(id,""));else->master.deleteSize(Size(id,"",0))} }}
+}
+
+private enum class Page { LIST, EDITOR, FILTERS, MANAGEMENT }
+@Composable private fun App(vm:InventoryViewModel){ var page by rememberSaveable{mutableStateOf(Page.LIST)}; var selected by rememberSaveable{mutableStateOf<Long?>(null)}; var copy by rememberSaveable{mutableStateOf(false)}
+ when(page){Page.LIST->ListScreen(vm,{page=Page.FILTERS},{selected=null;copy=false;page=Page.EDITOR},{id,c->selected=id;copy=c;page=Page.EDITOR},{vm.delete(it)},{page=Page.MANAGEMENT}); Page.EDITOR->Editor(vm,selected,copy,{page=Page.LIST}); Page.FILTERS->Filters(vm,{page=Page.LIST}); Page.MANAGEMENT->Management(vm,{page=Page.LIST})} }
+@Composable private fun Header(title:String,onBack:(()->Unit)?=null,actions:@Composable RowScope.()->Unit={}) = TopAppBar(
+ title = { Text(title) },
+ navigationIcon = { if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Terug") } },
+ actions = actions
+)
+@Composable private fun ListScreen(vm:InventoryViewModel,filters:()->Unit,new:()->Unit,edit:(Long,Boolean)->Unit,delete:(Long)->Unit,manage:()->Unit){ val rows by vm.rows.collectAsStateWithLifecycle(); var confirm by remember{mutableStateOf<Long?>(null)}
+ Scaffold(topBar={Header("Registraties",actions={IconButton(onClick=filters){Icon(Icons.Default.FilterList,"Filters")};IconButton(onClick=manage){Icon(Icons.Default.Settings,"Beheer")}})},floatingActionButton={ExtendedFloatingActionButton(onClick=new,icon={Icon(Icons.Default.Add,null)},text={Text("Nieuwe registratie")})}){pad->Column(Modifier.padding(pad).fillMaxSize()){OutlinedTextField(vm.search.collectAsState().value,{vm.search.value=it},Modifier.padding(12.dp).fillMaxWidth(),label={Text("Zoeken...")},leadingIcon={Icon(Icons.Default.Search,null)},singleLine=true); if(rows.isEmpty())Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Text("Nog geen registraties gevonden.")}else LazyColumn(contentPadding=PaddingValues(bottom=88.dp)){items(rows,key={it.id}){r->Card(Modifier.padding(horizontal=12.dp,vertical=5.dp).fillMaxWidth()){Column(Modifier.padding(14.dp)){Text(r.plant,fontWeight=FontWeight.Bold);Text("${r.department}  •  ${r.line}  •  ${r.size}  •  ${r.quantity}");Text("Laatst gewijzigd: ${format(r.updatedAt)}",style=MaterialTheme.typography.labelSmall);Row{TextButton(onClick={edit(r.id,false)}){Text("Bewerken")};TextButton(onClick={edit(r.id,true)}){Text("Kopiëren")};TextButton(onClick={confirm=r.id}){Text("Verwijderen")}}}}}}} }
+ if(confirm!=null)AlertDialog(onDismissRequest={confirm=null},title={Text("Registratie verwijderen?")},text={Text("Weet je zeker dat je deze registratie wilt verwijderen?")},confirmButton={TextButton(onClick={delete(confirm!!);confirm=null}){Text("Verwijderen")}},dismissButton={TextButton(onClick={confirm=null}){Text("Annuleren")}}) }
+private fun format(value:Long)=SimpleDateFormat("dd-MM-yyyy HH:mm",Locale("nl","NL")).format(Date(value))
+
+@Composable private fun Editor(vm:InventoryViewModel,id:Long?,isCopy:Boolean,back:()->Unit){ val plants by vm.plants.collectAsStateWithLifecycle(); val deps by vm.departments.collectAsStateWithLifecycle(); val lines by vm.lines.collectAsStateWithLifecycle(); val sizes by vm.sizes.collectAsStateWithLifecycle(); var old by remember{id?.let{mutableStateOf<InventoryRecord?>(null)}?:mutableStateOf(null)}
+ LaunchedEffect(id){if(id!=null)vm.load(id){old=it}}; var plant by remember(id){mutableStateOf<Long?>(null)};var dep by remember(id){mutableStateOf<Long?>(null)};var line by remember(id){mutableStateOf<Long?>(null)};var size by remember(id){mutableStateOf<Long?>(null)};var amount by remember(id){mutableStateOf("")}; var error by remember{mutableStateOf(false)}
+ LaunchedEffect(old){old?.let{plant=it.plantId;dep=it.departmentId;line=it.lineId;size=it.sizeId;amount=it.quantity.toString()}}
+ Scaffold(topBar={Header(if(isCopy)"Registratie kopiëren" else if(id==null)"Nieuwe registratie" else "Registratie bewerken",back)}){pad->Column(Modifier.padding(pad).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){Picker("Plant",plants,plant,{plant=it.id},{it.name});Picker("Afdeling",deps,dep,{dep=it.id},{it.name});Picker("Lijn",lines.filter{it.departmentId==null||it.departmentId==dep},line,{line=it.id},{it.name});Picker("Maat",sizes,size,{size=it.id;amount=it.defaultQuantity.toString()},{it.name});OutlinedTextField(amount,{amount=it.filter(Char::isDigit)},Modifier.fillMaxWidth(),label={Text("Aantal")},isError=error,singleLine=true);if(error)Text("Vul alle velden in en gebruik een geldig aantal groter dan nul.",color=MaterialTheme.colorScheme.error);Button(onClick={val q=amount.toIntOrNull();error=plant==null||dep==null||line==null||size==null||q==null||q<1;if(!error){vm.save(if(isCopy)null else old,plant!!,dep!!,line!!,size!!,q!!);back()}},Modifier.fillMaxWidth()){Text("Opslaan")}}}
+}
+@Composable private fun <T> Picker(label:String,values:List<T>,value:Long?,select:(T)->Unit,name:(T)->String){var open by remember{mutableStateOf(false)};var query by remember{mutableStateOf("")};val selected=values.firstOrNull{when(it){is Plant->it.id==value;is Department->it.id==value;is Line->it.id==value;is Size->it.id==value;else->false}};Box{OutlinedTextField(selected?.let(name)?:"",{open=true},Modifier.fillMaxWidth(),label={Text(label)},readOnly=true,trailingIcon={Icon(Icons.Default.ArrowDropDown,null)});DropdownMenu(open,{open=false},Modifier.fillMaxWidth().heightIn(max=300.dp)){OutlinedTextField(query,{query=it},label={Text("Zoeken...")},singleLine=true,modifier=Modifier.padding(8.dp));values.filter{name(it).contains(query,true)}.forEach{x->DropdownMenuItem(text={Text(name(x))},onClick={select(x);open=false;query=""})}}}}
+
+@Composable private fun Filters(vm:InventoryViewModel,back:()->Unit){val p by vm.plants.collectAsStateWithLifecycle();val d by vm.departments.collectAsStateWithLifecycle();val l by vm.lines.collectAsStateWithLifecycle();val s by vm.sizes.collectAsStateWithLifecycle();var f by vm.filters.collectAsState();Scaffold(topBar={Header("Filters",back)}){pad->Column(Modifier.padding(pad).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){Picker("Plant",p,f.plantId,{f=f.copy(plantId=it.id)},{it.name});Picker("Afdeling",d,f.departmentId,{f=f.copy(departmentId=it.id)},{it.name});Picker("Lijn",l,f.lineId,{f=f.copy(lineId=it.id)},{it.name});Picker("Maat",s,f.sizeId,{f=f.copy(sizeId=it.id)},{it.name});Button(onClick={vm.filters.value=f;back()},Modifier.fillMaxWidth()){Text("Filters toepassen")};TextButton(onClick={vm.filters.value=InventoryFilter();back()},Modifier.fillMaxWidth()){Text("Filters wissen")}}}}
+
+@Composable private fun Management(vm:InventoryViewModel,back:()->Unit){var section by remember{mutableStateOf("Planten")};var name by remember{mutableStateOf("")};var qty by remember{mutableStateOf("")};var message by remember{mutableStateOf<String?>(null)};var editing by remember{mutableStateOf<Triple<Long,String,Int?>?>(null)};val values:List<Triple<Long,String,Int?>> = when(section){"Planten"->vm.plants.collectAsStateWithLifecycle().value.map{Triple(it.id,it.name,null)};"Afdelingen"->vm.departments.collectAsStateWithLifecycle().value.map{Triple(it.id,it.name,null)};"Lijnen"->vm.lines.collectAsStateWithLifecycle().value.map{Triple(it.id,it.name,null)};else->vm.sizes.collectAsStateWithLifecycle().value.map{Triple(it.id,it.name,it.defaultQuantity)}}
+ Scaffold(topBar={Header("Beheer",back)}){pad->Column(Modifier.padding(pad).padding(16.dp)){SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()){listOf("Planten","Afdelingen","Lijnen","Maten").forEachIndexed{i,x->SegmentedButton(section==x,{section=x;name="";qty=""},SegmentedButtonDefaults.itemShape(i,4)){Text(x)}}};Spacer(Modifier.height(12.dp));OutlinedTextField(name,{name=it},Modifier.fillMaxWidth(),label={Text("Naam")},singleLine=true);if(section=="Maten")OutlinedTextField(qty,{qty=it.filter(Char::isDigit)},Modifier.fillMaxWidth(),label={Text("Standaardaantal")},singleLine=true);Button(onClick={if(name.isNotBlank()&&(section!="Maten"||qty.toIntOrNull()!=null)){vm.add(section,name.trim(),qty.toIntOrNull()?:0);name="";qty=""}},Modifier.fillMaxWidth()){Text("Toevoegen")};message?.let{Text(it,color=MaterialTheme.colorScheme.error)};LazyColumn{items(values,key={it.first}){item->ListItem(headlineContent={Text(if(item.third==null)item.second else "${item.second} (${item.third})")},trailingContent={Row{IconButton(onClick={editing=item}){Icon(Icons.Default.Edit,"Bewerken")};IconButton(onClick={vm.deleteMaster(section,item.first){message="Dit item wordt gebruikt in bestaande registraties en kan niet worden verwijderd."}}){Icon(Icons.Default.Delete,"Verwijderen")}}});HorizontalDivider()}}}}
+ editing?.let { item -> var editName by remember(item.first){mutableStateOf(item.second)};var editQty by remember(item.first){mutableStateOf(item.third?.toString()?:"")};AlertDialog(onDismissRequest={editing=null},title={Text("${section} bewerken")},text={Column{OutlinedTextField(editName,{editName=it},label={Text("Naam")});if(section=="Maten")OutlinedTextField(editQty,{editQty=it.filter(Char::isDigit)},label={Text("Standaardaantal")})}},confirmButton={TextButton(onClick={if(editName.isNotBlank()&&(section!="Maten"||editQty.toIntOrNull()!=null)){vm.edit(section,item.first,editName.trim(),editQty.toIntOrNull()?:0);editing=null}}){Text("Opslaan")}},dismissButton={TextButton(onClick={editing=null}){Text("Annuleren")}}) }
+}
