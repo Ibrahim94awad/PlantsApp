@@ -25,7 +25,7 @@ import nl.plantenkwekerij.registratie.data.*
 import java.text.SimpleDateFormat
 import java.util.*
 
-class MainActivity: ComponentActivity() { override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); val db=PlantDatabase.open(applicationContext); setContent { MaterialTheme { App(ViewModelProvider(this, Factory(db))[InventoryViewModel::class.java]) } } }
+class MainActivity: ComponentActivity() { override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); val db=PlantDatabase.open(applicationContext); setContent { MaterialTheme { App(ViewModelProvider(this, Factory(db))[InventoryViewModel::class.java]) } } } }
 private class Factory(private val db:PlantDatabase):ViewModelProvider.Factory { override fun <T:ViewModel> create(c:Class<T>):T { @Suppress("UNCHECKED_CAST") return InventoryViewModel(db) as T } }
 
 class InventoryViewModel(private val db:PlantDatabase):ViewModel() {

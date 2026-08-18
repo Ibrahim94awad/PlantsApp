@@ -42,4 +42,3 @@ abstract class PlantDatabase:RoomDatabase(){ abstract fun inventory():InventoryD
      (1..50).forEach { number -> db.execSQL("INSERT INTO lines(name,departmentId,createdAt,updatedAt) VALUES(?,?,?,?)", arrayOf("Lijn $number", null, now(), now())) }
      listOf("1L" to 250,"2L" to 150,"5L" to 80).forEach { (name,quantity) -> db.execSQL("INSERT OR IGNORE INTO sizes(name,defaultQuantity,createdAt,updatedAt) VALUES(?,?,?,?)",arrayOf(name,quantity,now(),now())) }
  } }).build() } }
-}
