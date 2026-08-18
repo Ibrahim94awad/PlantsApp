@@ -1,0 +1,27 @@
+name: Bouw Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Java 17 instellen
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle-wrapper maken
+        run: gradle wrapper --gradle-version 8.7
+      - name: Debug-APK bouwen
+        run: ./gradlew :app:assembleDebug
+      - name: APK bewaren
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlantsApp-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
