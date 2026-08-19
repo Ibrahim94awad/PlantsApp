@@ -7,3 +7,7 @@ De database gebruikt Room met buitenlandse sleutels, indexen en een niet-destruc
 ## Android en iOS
 
 De cross-platformversie staat in `flutter_app/` en gebruikt Flutter met een lokale SQLite-database. De GitHub Actions-workflow **Bouw Android en iOS** maakt een Android-APK en een unsigned iOS-app. Voor installatie op een echte iPhone moet de iOS-app met een Apple Developer-certificaat en provisioning profile worden ondertekend.
+
+## Webapp installeren
+
+De workflow **Publiceer webapp** publiceert dezelfde Flutter-app als een installeerbare webapp via GitHub Pages. De browser bewaart de database lokaal op het apparaat. Open de webapp in Safari of Chrome en kies **Zet op beginscherm** of **Toevoegen aan startscherm** om hem als app te gebruiken.

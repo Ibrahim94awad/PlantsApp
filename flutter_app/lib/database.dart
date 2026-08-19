@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
-import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+
+import 'database_platform.dart'
+    if (dart.library.js_interop) 'database_platform_web.dart';
 
 int _now() => DateTime.now().millisecondsSinceEpoch;
 
@@ -126,7 +128,8 @@ class AppDatabase {
 
   Future<void> init() async {
     if (_database != null) return;
-    final path = p.join(await getDatabasesPath(), 'plantregistratie_flutter.db');
+    await configureDatabasePlatform();
+    final path = await applicationDatabasePath('plantregistratie_flutter.db');
     _database = await openDatabase(
       path,
       version: 1,
@@ -179,8 +182,9 @@ class AppDatabase {
   }
 
   Future<void> _importLegacyDatabase() async {
+    if (!canImportLegacyDatabase) return;
     if (await _count('plants') > 0 || await _count('inventory_records') > 0) return;
-    final legacyPath = p.join(await getDatabasesPath(), 'plantregistratie.db');
+    final legacyPath = await applicationDatabasePath('plantregistratie.db');
     if (!await databaseExists(legacyPath)) return;
     Database? legacy;
     try {

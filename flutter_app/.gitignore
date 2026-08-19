@@ -6,4 +6,5 @@ build/
 coverage/
 android/
 ios/
+web/
 pubspec.lock

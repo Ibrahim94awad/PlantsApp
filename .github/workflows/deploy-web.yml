@@ -1,0 +1,67 @@
+name: Publiceer webapp
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'flutter_app/**'
+      - '.github/workflows/deploy-web.yml'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Bouw webapp
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Flutter instellen
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Webproject genereren
+        working-directory: flutter_app
+        run: flutter create --platforms=web --project-name registratie --org nl.plantenkwekerij .
+      - name: Appbron herstellen
+        working-directory: flutter_app
+        run: git checkout -- pubspec.yaml analysis_options.yaml lib test assets
+      - name: Afhankelijkheden ophalen
+        working-directory: flutter_app
+        run: flutter pub get
+      - name: SQLite-browserbestanden maken
+        working-directory: flutter_app
+        run: dart run sqflite_common_ffi_web:setup
+      - name: Broncode controleren
+        working-directory: flutter_app
+        run: flutter analyze
+      - name: Tests uitvoeren
+        working-directory: flutter_app
+        run: flutter test
+      - name: Webapp bouwen
+        working-directory: flutter_app
+        run: flutter build web --release --base-href "/PlantsApp/"
+      - name: Pages-artifact bewaren
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: flutter_app/build/web
+
+  deploy:
+    name: Publiceer op GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publiceer
+        id: deployment
+        uses: actions/deploy-pages@v4
