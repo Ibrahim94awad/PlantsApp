@@ -1,0 +1,79 @@
+name: Bouw Android en iOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'flutter_app/**'
+      - '.github/workflows/build-cross-platform.yml'
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Java 17 instellen
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Flutter instellen
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Platformprojecten genereren
+        working-directory: flutter_app
+        run: flutter create --platforms=android,ios --project-name registratie --org nl.plantenkwekerij .
+      - name: Appbron herstellen
+        working-directory: flutter_app
+        run: git checkout -- pubspec.yaml analysis_options.yaml lib test assets
+      - name: Afhankelijkheden ophalen
+        working-directory: flutter_app
+        run: flutter pub get
+      - name: Broncode controleren
+        working-directory: flutter_app
+        run: flutter analyze
+      - name: Tests uitvoeren
+        working-directory: flutter_app
+        run: flutter test
+      - name: Release-APK bouwen
+        working-directory: flutter_app
+        run: flutter build apk --release
+      - name: APK bewaren
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlantsApp-Android-APK
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  ios:
+    name: iOS unsigned app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Flutter instellen
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Platformprojecten genereren
+        working-directory: flutter_app
+        run: flutter create --platforms=android,ios --project-name registratie --org nl.plantenkwekerij .
+      - name: Appbron herstellen
+        working-directory: flutter_app
+        run: git checkout -- pubspec.yaml analysis_options.yaml lib test assets
+      - name: Afhankelijkheden ophalen
+        working-directory: flutter_app
+        run: flutter pub get
+      - name: iOS-app bouwen zonder signing
+        working-directory: flutter_app
+        run: flutter build ios --release --no-codesign
+      - name: iOS-app bewaren
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlantsApp-iOS-unsigned
+          path: flutter_app/build/ios/iphoneos/Runner.app
+          if-no-files-found: error

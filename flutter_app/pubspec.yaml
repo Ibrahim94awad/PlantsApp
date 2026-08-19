@@ -1,0 +1,24 @@
+name: plantregistratie
+description: Offline plant- en boomregistratie voor Android en iOS.
+publish_to: none
+version: 2.0.0+2
+
+environment:
+  sdk: '>=3.6.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sqflite: ^2.4.3
+  path: ^1.9.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/plants.csv
+    - assets/departments.txt
