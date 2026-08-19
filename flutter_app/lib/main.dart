@@ -621,7 +621,9 @@ class _StockPageState extends State<StockPage> {
       MasterType.sizes => 'Maat',
     };
     for (final choice in _choices[type] ?? const <Choice>[]) {
-      if (choice.id == id) return choice.name;
+      if (choice.id == id) {
+        return choice.name;
+      }
     }
     return type.label;
   }
