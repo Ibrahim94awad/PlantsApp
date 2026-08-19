@@ -11,3 +11,5 @@ De cross-platformversie staat in `flutter_app/` en gebruikt Flutter met een loka
 ## Webapp installeren
 
 De workflow **Publiceer webapp** publiceert dezelfde Flutter-app als een installeerbare webapp via GitHub Pages. De browser bewaart de database lokaal op het apparaat. Open de webapp in Safari of Chrome en kies **Zet op beginscherm** of **Toevoegen aan startscherm** om hem als app te gebruiken.
+
+De app heeft twee hoofdonderdelen: **Registraties** voor het toevoegen en beheren van voorraadmutaties en **Voorraad** voor actuele, gefilterde totalen per plant en locatie. Een unieke combinatie van plant, afdeling, lijn en maat wordt automatisch samengevoegd. Elke toevoeging of correctie blijft apart zichtbaar onder **Geschiedenis**. Bestaande databases worden bij de eerste start veilig gemigreerd; dubbele posities worden opgeteld zonder oude registratiemomenten te verliezen.

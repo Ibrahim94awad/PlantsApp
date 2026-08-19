@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart' show DatabaseException;
 
 import 'database.dart';
 
@@ -22,9 +23,27 @@ class PlantsApp extends StatelessWidget {
           useMaterial3: true,
           inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
         ),
-        home: const InventoryPage(),
+        home: const HomePage(),
       );
 }
+
+String formatQuantity(int value) {
+  final digits = value.abs().toString();
+  final formatted = digits.replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => '.',
+  );
+  return value < 0 ? '-$formatted' : formatted;
+}
+
+String historyAction(String action) => switch (action) {
+      'created' => 'Aangemaakt',
+      'added' => 'Toegevoegd',
+      'removed' => 'Verwijderd',
+      'corrected' => 'Gecorrigeerd',
+      'edited' => 'Bewerkt',
+      _ => action,
+    };
 
 String formatDateTime(int value) {
   final date = DateTime.fromMillisecondsSinceEpoch(value);
@@ -129,6 +148,52 @@ class ChoiceField extends StatelessWidget {
   }
 }
 
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final _stockKey = GlobalKey<_StockPageState>();
+  int _index = 0;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: IndexedStack(
+          index: _index,
+          children: [
+            const InventoryPage(),
+            StockPage(key: _stockKey),
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (value) {
+            setState(() => _index = value);
+            if (value == 1) {
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => _stockKey.currentState?.reload(),
+              );
+            }
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.receipt_long_outlined),
+              selectedIcon: Icon(Icons.receipt_long),
+              label: 'Registraties',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.inventory_2_outlined),
+              selectedIcon: Icon(Icons.inventory_2),
+              label: 'Voorraad',
+            ),
+          ],
+        ),
+      );
+}
+
 class InventoryPage extends StatefulWidget {
   const InventoryPage({super.key});
 
@@ -168,8 +233,8 @@ class _InventoryPageState extends State<InventoryPage> {
     _debounce = Timer(const Duration(milliseconds: 250), _reload);
   }
 
-  Future<void> _openEditor([int? id]) async {
-    final changed = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => EditorPage(recordId: id)));
+  Future<void> _openEditor([int? id, int? copyFromId]) async {
+    final changed = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => EditorPage(recordId: id, copyFromId: copyFromId)));
     if (changed == true) await _reload();
   }
 
@@ -182,9 +247,7 @@ class _InventoryPageState extends State<InventoryPage> {
   }
 
   Future<void> _copy(int id) async {
-    final newId = await _database.copyRecord(id);
-    await _reload();
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Registratie Nr. $newId is gekopieerd.')));
+    await _openEditor(null, id);
   }
 
   Future<void> _delete(int id) async {
@@ -209,7 +272,7 @@ class _InventoryPageState extends State<InventoryPage> {
   Widget build(BuildContext context) {
     final grouped = <DateTime, List<InventoryRow>>{};
     for (final row in _rows) {
-      grouped.putIfAbsent(dateOnly(row.createdAt), () => []).add(row);
+      grouped.putIfAbsent(dateOnly(row.updatedAt), () => []).add(row);
     }
     return Scaffold(
       appBar: AppBar(
@@ -286,7 +349,13 @@ class _InventoryPageState extends State<InventoryPage> {
                                   style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
                                 ),
                               ),
-                              for (final row in group.value) _InventoryCard(row: row, onEdit: () => _openEditor(row.id), onCopy: () => _copy(row.id), onDelete: () => _delete(row.id)),
+                              for (final row in group.value) _InventoryCard(
+                                row: row,
+                                onEdit: () => _openEditor(row.id),
+                                onCopy: () => _copy(row.id),
+                                onDelete: () => _delete(row.id),
+                                onHistory: () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => HistoryPage(row: row))),
+                              ),
                             ],
                           ],
                         ),
@@ -299,11 +368,12 @@ class _InventoryPageState extends State<InventoryPage> {
 }
 
 class _InventoryCard extends StatelessWidget {
-  const _InventoryCard({required this.row, required this.onEdit, required this.onCopy, required this.onDelete});
+  const _InventoryCard({required this.row, required this.onEdit, required this.onCopy, required this.onDelete, required this.onHistory});
   final InventoryRow row;
   final VoidCallback onEdit;
   final VoidCallback onCopy;
   final VoidCallback onDelete;
+  final VoidCallback onHistory;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -318,12 +388,14 @@ class _InventoryCard extends StatelessWidget {
                 Text('Nr. ${row.id}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)),
               ]),
               const SizedBox(height: 4),
-              Text('${row.department}  •  ${row.line}  •  ${row.size}  •  ${row.quantity}'),
+              Text('${row.department}  •  ${row.line}  •  ${row.size}  •  ${formatQuantity(row.quantity)}'),
               Text('Aangemaakt: ${formatDateTime(row.createdAt)}', style: Theme.of(context).textTheme.labelSmall),
+              Text('Laatst gewijzigd: ${formatDateTime(row.updatedAt)}', style: Theme.of(context).textTheme.labelSmall),
               Wrap(
                 children: [
                   TextButton(onPressed: onEdit, child: const Text('Bewerken')),
                   TextButton(onPressed: onCopy, child: const Text('Kopiëren')),
+                  TextButton(onPressed: onHistory, child: const Text('Geschiedenis')),
                   TextButton(onPressed: onDelete, child: const Text('Verwijderen')),
                 ],
               ),
@@ -334,8 +406,9 @@ class _InventoryCard extends StatelessWidget {
 }
 
 class EditorPage extends StatefulWidget {
-  const EditorPage({super.key, this.recordId});
+  const EditorPage({super.key, this.recordId, this.copyFromId});
   final int? recordId;
+  final int? copyFromId;
 
   @override
   State<EditorPage> createState() => _EditorPageState();
@@ -376,7 +449,8 @@ class _EditorPageState extends State<EditorPage> {
       _database.choices(MasterType.sizes),
     ]);
     InventoryRecordData? record;
-    if (widget.recordId != null) record = await _database.record(widget.recordId!);
+    final sourceId = widget.recordId ?? widget.copyFromId;
+    if (sourceId != null) record = await _database.record(sourceId);
     if (!mounted) return;
     setState(() {
       _plants = values[0];
@@ -398,21 +472,53 @@ class _EditorPageState extends State<EditorPage> {
       setState(() => _error = 'Vul alle velden in en gebruik een geldig aantal groter dan nul.');
       return;
     }
+    if (widget.recordId == null) {
+      final existing = await _database.matchingRecord(
+        plantId: _plantId!,
+        departmentId: _departmentId!,
+        lineId: _lineId!,
+        sizeId: _sizeId!,
+      );
+      if (existing != null && mounted) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Bestaande registratie gevonden'),
+            content: Text(
+              'Huidig aantal: ${formatQuantity(existing.quantity)}\n'
+              'Toevoegen: ${formatQuantity(quantity)}\n'
+              'Nieuw totaal: ${formatQuantity(existing.quantity + quantity)}',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuleren')),
+              FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Toevoegen aan bestaande registratie')),
+            ],
+          ),
+        );
+        if (confirmed != true) return;
+      }
+    }
     setState(() { _saving = true; _error = null; });
-    await _database.saveRecord(
-      id: widget.recordId,
-      plantId: _plantId!,
-      departmentId: _departmentId!,
-      lineId: _lineId!,
-      sizeId: _sizeId!,
-      quantity: quantity,
-    );
-    if (mounted) Navigator.pop(context, true);
+    try {
+      await _database.saveRecord(
+        id: widget.recordId,
+        plantId: _plantId!,
+        departmentId: _departmentId!,
+        lineId: _lineId!,
+        sizeId: _sizeId!,
+        quantity: quantity,
+      );
+      if (mounted) Navigator.pop(context, true);
+    } on StateError catch (error) {
+      if (mounted) setState(() { _saving = false; _error = error.message.toString(); });
+    } on DatabaseException {
+      if (mounted) setState(() { _saving = false; _error = 'Opslaan is niet gelukt. Controleer de gekozen voorraadpositie.'; });
+    }
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(widget.recordId == null ? 'Nieuwe registratie' : 'Registratie bewerken')),
+        appBar: AppBar(title: Text(widget.recordId != null ? 'Registratie bewerken' : widget.copyFromId != null ? 'Registratie kopiëren' : 'Nieuwe registratie')),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : ListView(
@@ -436,6 +542,277 @@ class _EditorPageState extends State<EditorPage> {
                   FilledButton(onPressed: _saving ? null : _save, child: Text(_saving ? 'Opslaan...' : 'Opslaan')),
                 ],
               ),
+      );
+}
+
+class StockPage extends StatefulWidget {
+  const StockPage({super.key});
+
+  @override
+  State<StockPage> createState() => _StockPageState();
+}
+
+class _StockPageState extends State<StockPage> {
+  final _database = AppDatabase.instance;
+  final _searchController = TextEditingController();
+  InventoryFilter _filter = const InventoryFilter();
+  List<PlantInventoryTotal> _plants = const [];
+  List<InventoryRow> _details = const [];
+  final Map<MasterType, List<Choice>> _choices = {};
+  int _total = 0;
+  bool _loading = true;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChoices();
+    reload();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadChoices() async {
+    for (final type in MasterType.values) {
+      _choices[type] = await _database.choices(type);
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> reload() async {
+    if (mounted) setState(() => _loading = true);
+    final results = await Future.wait<Object>([
+      _database.inventoryTotal(_searchController.text, _filter),
+      _database.inventoryPlantTotals(_searchController.text, _filter),
+      _database.inventory(_searchController.text, _filter),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _total = results[0] as int;
+      _plants = results[1] as List<PlantInventoryTotal>;
+      _details = results[2] as List<InventoryRow>;
+      _loading = false;
+    });
+  }
+
+  void _searchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), reload);
+  }
+
+  int? _selectedId(MasterType type) => switch (type) {
+        MasterType.plants => _filter.plantId,
+        MasterType.departments => _filter.departmentId,
+        MasterType.lines => _filter.lineId,
+        MasterType.sizes => _filter.sizeId,
+      };
+
+  String _filterLabel(MasterType type) {
+    final id = _selectedId(type);
+    if (id == null) return switch (type) {
+      MasterType.plants => 'Plant',
+      MasterType.departments => 'Afdeling',
+      MasterType.lines => 'Lijn',
+      MasterType.sizes => 'Maat',
+    };
+    for (final choice in _choices[type] ?? const <Choice>[]) {
+      if (choice.id == id) return choice.name;
+    }
+    return type.label;
+  }
+
+  Future<void> _chooseQuickFilter(MasterType type) async {
+    final choices = _choices[type] ?? await _database.choices(type);
+    if (!mounted) return;
+    final selected = await showChoiceDialog(context, _filterLabel(type), choices);
+    if (selected == null) return;
+    setState(() {
+      _filter = InventoryFilter(
+        plantId: type == MasterType.plants ? selected.id : _filter.plantId,
+        departmentId: type == MasterType.departments ? selected.id : _filter.departmentId,
+        lineId: type == MasterType.lines ? selected.id : _filter.lineId,
+        sizeId: type == MasterType.sizes ? selected.id : _filter.sizeId,
+      );
+    });
+    await reload();
+  }
+
+  Future<void> _openFilters() async {
+    final result = await Navigator.push<InventoryFilter>(context, MaterialPageRoute(builder: (_) => FiltersPage(initial: _filter)));
+    if (result == null) return;
+    setState(() => _filter = result);
+    await reload();
+  }
+
+  Future<void> _clearFilters() async {
+    _searchController.clear();
+    setState(() => _filter = const InventoryFilter());
+    await reload();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Voorraad')),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+              child: TextField(
+                controller: _searchController,
+                onChanged: _searchChanged,
+                decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Zoeken op plantnaam...'),
+              ),
+            ),
+            SizedBox(
+              height: 46,
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final type in MasterType.values)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        selected: _selectedId(type) != null,
+                        label: Text(_filterLabel(type)),
+                        onSelected: (_) => _chooseQuickFilter(type),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+              child: Row(
+                children: [
+                  OutlinedButton.icon(onPressed: _openFilters, icon: const Icon(Icons.filter_list), label: const Text('Filters')),
+                  const SizedBox(width: 8),
+                  TextButton(onPressed: _filter.activeCount == 0 && _searchController.text.isEmpty ? null : _clearFilters, child: const Text('Wis filters')),
+                ],
+              ),
+            ),
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                '${_filter.activeCount == 0 && _searchController.text.isEmpty ? 'Totaal aantal planten' : 'Totaal'}: ${formatQuantity(_total)}',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _plants.isEmpty
+                      ? const Center(child: Text('Geen voorraad gevonden.'))
+                      : RefreshIndicator(
+                          onRefresh: reload,
+                          child: ListView.builder(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            itemCount: _plants.length,
+                            itemBuilder: (context, index) {
+                              final plant = _plants[index];
+                              final rows = _details.where((row) => row.plant == plant.plant).toList();
+                              return Card(
+                                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                child: ExpansionTile(
+                                  title: Row(
+                                    children: [
+                                      Expanded(child: Text(plant.plant, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                      Text(formatQuantity(plant.quantity), style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                  children: [
+                                    for (final row in rows)
+                                      ListTile(
+                                        title: Text('${row.department} • ${row.line} • ${row.size}'),
+                                        subtitle: Text('Laatst gewijzigd: ${formatDateTime(row.updatedAt)}'),
+                                        trailing: Text(formatQuantity(row.quantity), style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        onTap: () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => HistoryPage(row: row))),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+            ),
+          ],
+        ),
+      );
+}
+
+class HistoryPage extends StatefulWidget {
+  const HistoryPage({super.key, required this.row});
+  final InventoryRow row;
+
+  @override
+  State<HistoryPage> createState() => _HistoryPageState();
+}
+
+class _HistoryPageState extends State<HistoryPage> {
+  late final Future<List<InventoryHistoryEntry>> _history;
+
+  @override
+  void initState() {
+    super.initState();
+    _history = AppDatabase.instance.history(widget.row.id);
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Geschiedenis')),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.row.plant, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  Text('${widget.row.department} • ${widget.row.line} • ${widget.row.size}'),
+                  const SizedBox(height: 8),
+                  Text('Huidige voorraad: ${formatQuantity(widget.row.quantity)}', style: Theme.of(context).textTheme.titleMedium),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: FutureBuilder<List<InventoryHistoryEntry>>(
+                future: _history,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+                  final entries = snapshot.data ?? const [];
+                  if (entries.isEmpty) return const Center(child: Text('Nog geen geschiedenis beschikbaar.'));
+                  return ListView.separated(
+                    itemCount: entries.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final entry = entries[index];
+                      final sign = entry.changeAmount > 0 ? '+' : '';
+                      return ListTile(
+                        leading: Icon(entry.changeAmount >= 0 ? Icons.add_circle_outline : Icons.remove_circle_outline),
+                        title: Text(historyAction(entry.action)),
+                        subtitle: Text(formatDateTime(entry.createdAt)),
+                        trailing: Text('$sign${formatQuantity(entry.changeAmount)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       );
 }
 
