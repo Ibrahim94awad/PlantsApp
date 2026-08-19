@@ -21,4 +21,13 @@ void main() {
     expect(historyAction('added'), 'Toegevoegd');
     expect(historyAction('removed'), 'Verwijderd');
   });
+
+  test('kopiëren gebruikt het standaardaantal van de maat', () {
+    const sizes = [
+      Choice(1, '1L', defaultQuantity: 250),
+      Choice(2, '2L', defaultQuantity: 150),
+    ];
+    expect(defaultQuantityForSize(sizes, 2), 150);
+    expect(defaultQuantityForSize(sizes, 99), isNull);
+  });
 }

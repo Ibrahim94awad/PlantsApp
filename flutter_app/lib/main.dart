@@ -45,6 +45,15 @@ String historyAction(String action) => switch (action) {
       _ => action,
     };
 
+int? defaultQuantityForSize(List<Choice> sizes, int? sizeId) {
+  for (final size in sizes) {
+    if (size.id == sizeId) {
+      return size.defaultQuantity;
+    }
+  }
+  return null;
+}
+
 String formatDateTime(int value) {
   final date = DateTime.fromMillisecondsSinceEpoch(value);
   String two(int number) => number.toString().padLeft(2, '0');
@@ -451,6 +460,9 @@ class _EditorPageState extends State<EditorPage> {
     InventoryRecordData? record;
     final sourceId = widget.recordId ?? widget.copyFromId;
     if (sourceId != null) record = await _database.record(sourceId);
+    final copiedQuantity = widget.copyFromId == null
+        ? null
+        : defaultQuantityForSize(values[3], record?.sizeId);
     if (!mounted) return;
     setState(() {
       _plants = values[0];
@@ -461,7 +473,9 @@ class _EditorPageState extends State<EditorPage> {
       _departmentId = record?.departmentId;
       _lineId = record?.lineId;
       _sizeId = record?.sizeId;
-      _quantity.text = record?.quantity.toString() ?? '';
+      _quantity.text = widget.copyFromId != null
+          ? copiedQuantity?.toString() ?? ''
+          : record?.quantity.toString() ?? '';
       _loading = false;
     });
   }
