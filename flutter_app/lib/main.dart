@@ -614,12 +614,14 @@ class _StockPageState extends State<StockPage> {
 
   String _filterLabel(MasterType type) {
     final id = _selectedId(type);
-    if (id == null) return switch (type) {
-      MasterType.plants => 'Plant',
-      MasterType.departments => 'Afdeling',
-      MasterType.lines => 'Lijn',
-      MasterType.sizes => 'Maat',
-    };
+    if (id == null) {
+      return switch (type) {
+        MasterType.plants => 'Plant',
+        MasterType.departments => 'Afdeling',
+        MasterType.lines => 'Lijn',
+        MasterType.sizes => 'Maat',
+      };
+    }
     for (final choice in _choices[type] ?? const <Choice>[]) {
       if (choice.id == id) {
         return choice.name;
