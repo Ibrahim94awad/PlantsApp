@@ -539,11 +539,13 @@ class _EditorPageState extends State<EditorPage> {
   List<Choice> _subDepartments = const [];
   List<Choice> _lines = const [];
   List<Choice> _sizes = const [];
+  List<Choice> _blocks = const [];
   int? _plantId;
   int? _departmentId;
   int? _subDepartmentId;
   int? _lineId;
   int? _sizeId;
+  int? _blockId;
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -567,6 +569,7 @@ class _EditorPageState extends State<EditorPage> {
       _database.choices(MasterType.subDepartments),
       _database.choices(MasterType.lines),
       _database.choices(MasterType.sizes),
+      _database.choices(MasterType.blocks),
     ]);
     InventoryRecordData? record;
     final sourceId = widget.recordId ?? widget.copyFromId;
@@ -581,11 +584,14 @@ class _EditorPageState extends State<EditorPage> {
       _subDepartments = values[2];
       _lines = values[3];
       _sizes = values[4];
+      _blocks = values[5];
       _plantId = record?.plantId;
       _departmentId = record?.departmentId;
       _subDepartmentId = record?.subDepartmentId ?? widget.initialSubDepartmentId;
       _lineId = record?.lineId;
       _sizeId = record?.sizeId;
+      // default block: prefer multiplier == 1 if available
+      _blockId = _blocks.firstWhere((c) => c.defaultQuantity == 1, orElse: () => _blocks.isNotEmpty ? _blocks.first : Choice(0, '1', defaultQuantity: 1)).id;
       _quantity.text = widget.copyFromId != null
           ? copiedQuantity?.toString() ?? ''
           : record?.quantity.toString() ?? '';
@@ -599,6 +605,10 @@ class _EditorPageState extends State<EditorPage> {
       setState(() => _error = 'Vul alle velden in en gebruik een geldig aantal groter dan nul.');
       return;
     }
+    // apply block multiplier if selected
+    final blockChoice = _blocks.firstWhere((c) => c.id == _blockId, orElse: () => Choice(0, '1', defaultQuantity: 1));
+    final multiplier = blockChoice.defaultQuantity ?? 1;
+    final saveQuantity = quantity * multiplier;
     if (widget.recordId == null) {
       final existing = await _database.matchingRecord(
         plantId: _plantId!,
@@ -635,7 +645,7 @@ class _EditorPageState extends State<EditorPage> {
         subDepartmentId: _subDepartmentId!,
         lineId: _lineId!,
         sizeId: _sizeId!,
-        quantity: quantity,
+        quantity: saveQuantity,
       );
       if (mounted) Navigator.pop(context, true);
     } on StateError catch (error) {
@@ -659,7 +669,10 @@ class _EditorPageState extends State<EditorPage> {
                   const SizedBox(height: 12),
                   ChoiceField(label: 'Onderafdeling', choices: _subDepartments, selectedId: _subDepartmentId, onSelected: (choice) => setState(() => _subDepartmentId = choice.id)),
                   const SizedBox(height: 12),
+                  ChoiceField(label: 'Block', choices: _blocks, selectedId: _blockId, onSelected: (choice) => setState(() => _blockId = choice.id)),
+                  const SizedBox(height: 12),
                   ChoiceField(label: 'Lijn', choices: _lines, selectedId: _lineId, onSelected: (choice) => setState(() => _lineId = choice.id)),
+
                   const SizedBox(height: 12),
                   ChoiceField(label: 'Maat', choices: _sizes, selectedId: _sizeId, onSelected: (choice) => setState(() { _sizeId = choice.id; _quantity.text = choice.defaultQuantity?.toString() ?? ''; })),
                   const SizedBox(height: 12),
@@ -1107,8 +1120,14 @@ class _ManagementPageState extends State<ManagementPage> {
     final quantity=TextEditingController(text:item?.defaultQuantity?.toString()??'');
     final saved=await showDialog<bool>(context:context,builder:(context)=>AlertDialog(
       title:Text(item==null?'${_type.label} toevoegen':'${_type.label} bewerken'),
-      content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:name,autofocus:true,decoration:const InputDecoration(labelText:'Naam')),if(_type==MasterType.sizes)...[const SizedBox(height:12),TextField(controller:quantity,keyboardType:TextInputType.number,decoration:const InputDecoration(labelText:'Standaardaantal'))]]),
-      actions:[TextButton(onPressed:()=>Navigator.pop(context,false),child:const Text('Annuleren')),FilledButton(onPressed:(){if(name.text.trim().isNotEmpty&&(_type!=MasterType.sizes||int.tryParse(quantity.text)!=null))Navigator.pop(context,true);},child:const Text('Opslaan'))],
+      content:Column(mainAxisSize:MainAxisSize.min,children:[
+        TextField(controller:name,autofocus:true,decoration:const InputDecoration(labelText:'Naam')),
+        if(_type==MasterType.sizes || _type==MasterType.blocks)...[
+          const SizedBox(height:12),
+          TextField(controller:quantity,keyboardType:TextInputType.number,decoration:InputDecoration(labelText: _type==MasterType.sizes ? 'Standaardaantal' : 'Vermenigvuldiger'))
+        ]
+      ]),
+      actions:[TextButton(onPressed:()=>Navigator.pop(context,false),child:const Text('Annuleren')),FilledButton(onPressed:(){if(name.text.trim().isNotEmpty&&(_type!=MasterType.sizes&&_type!=MasterType.blocks||int.tryParse(quantity.text)!=null))Navigator.pop(context,true);},child:const Text('Opslaan'))],
     ));
     if(saved==true){
       try{
@@ -1140,7 +1159,15 @@ class _ManagementPageState extends State<ManagementPage> {
       body:Column(children:[
         SingleChildScrollView(scrollDirection:Axis.horizontal,padding:const EdgeInsets.symmetric(horizontal:8),child:Row(children:[for(final type in MasterType.values)Padding(padding:const EdgeInsets.symmetric(horizontal:3),child:ChoiceChip(label:Text(type.label,maxLines:1),selected:_type==type,onSelected:(_){setState((){_type=type;_loading=true;_search='';});_load();}))])),
         Padding(padding:const EdgeInsets.all(12),child:TextField(onChanged:(value)=>setState(()=>_search=value),decoration:const InputDecoration(prefixIcon:Icon(Icons.search),labelText:'Zoeken...'))),
-        Expanded(child:_loading?const Center(child:CircularProgressIndicator()):filtered.isEmpty?const Center(child:Text('Geen items gevonden.')):ListView.separated(padding:const EdgeInsets.only(bottom:88),itemCount:filtered.length,separatorBuilder:(_,__)=>const Divider(height:1),itemBuilder:(context,index){final item=filtered[index];return ListTile(title:Text(item.name),subtitle:item.defaultQuantity==null?null:Text('Standaardaantal: ${item.defaultQuantity}'),trailing:Wrap(children:[IconButton(onPressed:()=>_editDialog(item),icon:const Icon(Icons.edit),tooltip:'Bewerken'),IconButton(onPressed:()=>_delete(item),icon:const Icon(Icons.delete),tooltip:'Verwijderen')]));})),
+        Expanded(child:_loading?const Center(child:CircularProgressIndicator()):filtered.isEmpty?const Center(child:Text('Geen items gevonden.')):ListView.separated(padding:const EdgeInsets.only(bottom:88),itemCount:filtered.length,separatorBuilder:(_,__)=>const Divider(height:1),itemBuilder:(context,index){final item=filtered[index];return ListTile(
+          title: Text(item.name),
+          subtitle: _type == MasterType.sizes
+              ? Text('Standaardaantal: ${item.defaultQuantity}')
+              : _type == MasterType.blocks
+                  ? Text('Vermenigvuldiger: ${item.defaultQuantity}')
+                  : null,
+          trailing: Wrap(children: [IconButton(onPressed: ()=>_editDialog(item), icon: const Icon(Icons.edit), tooltip: 'Bewerken'), IconButton(onPressed: ()=>_delete(item), icon: const Icon(Icons.delete), tooltip: 'Verwijderen')]),
+        );})),
       ]),
     );
   }

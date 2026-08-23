@@ -24,6 +24,7 @@ class InventoryRow {
     required this.quantity,
     required this.createdAt,
     required this.updatedAt,
+    this.sequenceNumber,
   });
 
   factory InventoryRow.fromMap(Map<String, Object?> map) => InventoryRow(
@@ -36,6 +37,20 @@ class InventoryRow {
         quantity: map['quantity'] as int,
         createdAt: map['createdAt'] as int,
         updatedAt: map['updatedAt'] as int,
+        sequenceNumber: map['sequenceNumber'] as int?,
+      );
+
+  InventoryRow copyWith({int? sequenceNumber}) => InventoryRow(
+        id: id,
+        plant: plant,
+        department: department,
+        subDepartment: subDepartment,
+        line: line,
+        size: size,
+        quantity: quantity,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        sequenceNumber: sequenceNumber ?? this.sequenceNumber,
       );
 
   final int id;
@@ -47,6 +62,7 @@ class InventoryRow {
   final int quantity;
   final int createdAt;
   final int updatedAt;
+  final int? sequenceNumber;
 }
 
 class InventoryRecordData {
@@ -155,7 +171,7 @@ class InventoryFilter {
       );
 }
 
-enum MasterType { plants, departments, subDepartments, lines, sizes }
+enum MasterType { plants, departments, subDepartments, lines, sizes, blocks }
 
 extension MasterTypeText on MasterType {
   String get label => switch (this) {
@@ -164,14 +180,16 @@ extension MasterTypeText on MasterType {
         MasterType.subDepartments => 'Onderafdelingen',
         MasterType.lines => 'Lijnen',
         MasterType.sizes => 'Maten',
-      };
-
+       MasterType.blocks => 'Blokken',
+     };
+ 
   String get table => switch (this) {
         MasterType.plants => 'plants',
         MasterType.departments => 'departments',
         MasterType.subDepartments => 'subdepartments',
         MasterType.lines => 'lines',
         MasterType.sizes => 'sizes',
+        MasterType.blocks => 'blocks',
       };
 }
 
@@ -221,6 +239,12 @@ class AppDatabase {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL UNIQUE,
           defaultQuantity INTEGER NOT NULL,
+          createdAt INTEGER NOT NULL,
+          updatedAt INTEGER NOT NULL)''');
+        await db.execute('''CREATE TABLE blocks(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          multiplier INTEGER NOT NULL,
           createdAt INTEGER NOT NULL,
           updatedAt INTEGER NOT NULL)''');
         await db.execute('''CREATE TABLE inventory_records(
@@ -448,6 +472,13 @@ class AppDatabase {
       }
       await batch.commit(noResult: true);
     }
+    if (await _count('blocks') == 0) {
+      final batch = database.batch();
+      for (var i = 1; i <= 10; i++) {
+        batch.insert('blocks', {'name': i.toString(), 'multiplier': i, 'createdAt': stamp, 'updatedAt': stamp});
+      }
+      await batch.commit(noResult: true);
+    }
   }
 
   Future<List<Choice>> choices(MasterType type, {int? departmentId}) async {
@@ -456,7 +487,10 @@ class AppDatabase {
       _ => null,
     };
     final rows = await database.query(type.table, where: where, whereArgs: where == null ? null : [departmentId], orderBy: 'name COLLATE NOCASE');
-    return rows.map((row) => Choice(row['id'] as int, row['name'] as String, defaultQuantity: row['defaultQuantity'] as int?)).toList();
+        return rows.map((row) {
+          final defaultQty = row['defaultQuantity'] as int? ?? row['multiplier'] as int?;
+          return Choice(row['id'] as int, row['name'] as String, defaultQuantity: defaultQty);
+        }).toList();
   }
 
   Future<List<InventoryRow>> inventory(String search, InventoryFilter filter) async {
@@ -675,14 +709,16 @@ class AppDatabase {
       'name': name.trim(),
       if (type == MasterType.lines) 'departmentId': null,
       if (type == MasterType.sizes) 'defaultQuantity': defaultQuantity,
+      if (type == MasterType.blocks) 'multiplier': defaultQuantity,
       'createdAt': stamp,
       'updatedAt': stamp,
     }, conflictAlgorithm: ConflictAlgorithm.abort);
   }
-
+  
   Future<void> updateMaster(MasterType type, int id, String name, {int defaultQuantity = 0}) => database.update(type.table, {
         'name': name.trim(),
         if (type == MasterType.sizes) 'defaultQuantity': defaultQuantity,
+        if (type == MasterType.blocks) 'multiplier': defaultQuantity,
         'updatedAt': _now(),
       }, where: 'id = ?', whereArgs: [id]);
 
@@ -693,6 +729,7 @@ class AppDatabase {
       MasterType.subDepartments => 'SELECT COUNT(*) FROM inventory_records WHERE subDepartmentId = ?',
       MasterType.lines => 'SELECT COUNT(*) FROM inventory_records WHERE lineId = ?',
       MasterType.sizes => 'SELECT COUNT(*) FROM inventory_records WHERE sizeId = ?',
+      MasterType.blocks => 'SELECT 0',
     };
     final args = type == MasterType.departments ? [id, id] : [id];
     final used = Sqflite.firstIntValue(await database.rawQuery(usageSql, args)) ?? 0;
