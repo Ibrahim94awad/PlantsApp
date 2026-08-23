@@ -60,7 +60,7 @@ void main() {
     expect(migratedHistory.map((entry) => entry.changeAmount).reduce((a, b) => a + b), 356);
     expect(migratedHistory.where((entry) => entry.action == 'created'), hasLength(1));
 
-    await appDatabase.saveRecord(plantId: 1, departmentId: 1, lineId: 1, sizeId: 1, quantity: 44);
+    await appDatabase.saveRecord(plantId: 1, departmentId: 1, subDepartmentId: 1, lineId: 1, sizeId: 1, quantity: 44);
     expect(await appDatabase.inventoryTotal('', const InventoryFilter()), 400);
     expect(await appDatabase.history(rows.single.id), hasLength(4));
 

@@ -282,19 +282,45 @@ class _InventoryPageState extends State<InventoryPage> {
   Future<void> _loadSubDepartments() async {
     final subDepartments = await _database.choices(MasterType.subDepartments);
     if (!mounted) return;
+    final wasNull = _filter.subDepartmentId == null;
     setState(() {
       _subDepartments = subDepartments;
       if (_filter.subDepartmentId != null && !subDepartments.any((entry) => entry.id == _filter.subDepartmentId)) {
         _filter = _filter.copyWith(subDepartmentId: null);
       }
+      if (_filter.subDepartmentId == null && subDepartments.isNotEmpty) {
+        _filter = _filter.copyWith(subDepartmentId: subDepartments.first.id);
+      }
     });
+    // If previously there was no subDepartment selected and now we set a default, reload to apply it
+    if (wasNull && _filter.subDepartmentId != null) {
+      await _reload();
+    }
+  }
+
+  List<InventoryRow> _numberRowsBySubDepartment(List<InventoryRow> rows) {
+    final grouped = <String, List<InventoryRow>>{};
+    for (final row in rows) {
+      grouped.putIfAbsent(row.subDepartment, () => []).add(row);
+    }
+    final sequence = <int, int>{};
+    for (final entry in grouped.entries) {
+      final values = List<InventoryRow>.from(entry.value)
+        ..sort((a, b) {
+          final created = a.createdAt.compareTo(b.createdAt);
+          return created != 0 ? created : a.id.compareTo(b.id);
+        });
+      for (var index = 0; index < values.length; index++) {
+        sequence[values[index].id] = index + 1;
+      }
+    }
+    return rows.map((row) => row.copyWith(sequenceNumber: sequence[row.id] ?? row.sequenceNumber ?? row.id)).toList();
   }
 
   Future<void> _reload() async {
     if (mounted) setState(() => _loading = true);
-    final rows = await _database.inventory(_searchController.text, _filter);
-    // also compute counts per subDepartment based on the same search but without subDepartment filter
-    final countsRows = await _database.inventory(_searchController.text, _filter.copyWith(subDepartmentId: null));
+    final rows = _numberRowsBySubDepartment(await _database.inventory(_searchController.text, _filter));
+    final countsRows = await _database.inventory('', const InventoryFilter());
     final Map<int,int> counts = {};
     final choices = _subDepartments.isEmpty ? await _database.choices(MasterType.subDepartments) : _subDepartments;
     for (final choice in choices) {
@@ -377,22 +403,13 @@ class _InventoryPageState extends State<InventoryPage> {
         title: Text(selectedSubDepartment == null ? 'Registraties' : 'Registraties • ${selectedSubDepartment.name}'),
         actions: [
           IconButton(
-            tooltip: 'Filters',
-            onPressed: _openFilters,
-            icon: Badge(
-              isLabelVisible: _filter.activeCount > 0,
-              label: Text('${_filter.activeCount}'),
-              child: const Icon(Icons.filter_list),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Beheer',
-            onPressed: () async {
-              await Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ManagementPage()));
-                            await _loadSubDepartments();
-                            await _reload();
-            },
-            icon: const Icon(Icons.settings),
+           tooltip: 'Beheer',
+           onPressed: () async {
+             await Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ManagementPage()));
+             await _loadSubDepartments();
+             await _reload();
+           },
+           icon: const Icon(Icons.settings),
           ),
         ],
       ),
@@ -404,12 +421,12 @@ class _InventoryPageState extends State<InventoryPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _searchChanged,
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Zoeken...'),
-            ),
+           padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+           child: TextField(
+             controller: _searchController,
+             onChanged: _searchChanged,
+             decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Zoeken...'),
+           ),
           ),
           if (_subDepartments.isNotEmpty)
            SizedBox(
@@ -430,25 +447,6 @@ class _InventoryPageState extends State<InventoryPage> {
                ],
              ),
            ),
-          if (_filter.activeCount > 0)
-            Container(
-              margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              padding: const EdgeInsets.only(left: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.secondaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.filter_list),
-                  Expanded(child: Text('  ${_filter.activeCount} filter${_filter.activeCount == 1 ? '' : 's'} actief')),
-                  TextButton(
-                    onPressed: () { setState(() => _filter = const InventoryFilter()); _reload(); },
-                    child: const Text('Wissen'),
-                  ),
-                ],
-              ),
-            ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -503,7 +501,7 @@ class _InventoryCard extends StatelessWidget {
             children: [
               Row(children: [
                 Expanded(child: Text(row.plant, style: const TextStyle(fontWeight: FontWeight.bold))),
-                Text('Nr. ${row.id}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)),
+                Text('Nr. ${row.sequenceNumber ?? row.id}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)),
               ]),
               const SizedBox(height: 4),
               Text('${row.department}  •  ${row.subDepartment}  •  ${row.line}  •  ${row.size}  •  ${formatQuantity(row.quantity)}'),
@@ -541,11 +539,13 @@ class _EditorPageState extends State<EditorPage> {
   List<Choice> _subDepartments = const [];
   List<Choice> _lines = const [];
   List<Choice> _sizes = const [];
+  List<Choice> _blocks = const [];
   int? _plantId;
   int? _departmentId;
   int? _subDepartmentId;
   int? _lineId;
   int? _sizeId;
+  int? _blockId;
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -569,6 +569,7 @@ class _EditorPageState extends State<EditorPage> {
       _database.choices(MasterType.subDepartments),
       _database.choices(MasterType.lines),
       _database.choices(MasterType.sizes),
+      _database.choices(MasterType.blocks),
     ]);
     InventoryRecordData? record;
     final sourceId = widget.recordId ?? widget.copyFromId;
@@ -583,11 +584,14 @@ class _EditorPageState extends State<EditorPage> {
       _subDepartments = values[2];
       _lines = values[3];
       _sizes = values[4];
+      _blocks = values[5];
       _plantId = record?.plantId;
       _departmentId = record?.departmentId;
       _subDepartmentId = record?.subDepartmentId ?? widget.initialSubDepartmentId;
       _lineId = record?.lineId;
       _sizeId = record?.sizeId;
+      // default block: prefer multiplier == 1 if available
+      _blockId = _blocks.firstWhere((c) => c.defaultQuantity == 1, orElse: () => _blocks.isNotEmpty ? _blocks.first : Choice(0, '1', defaultQuantity: 1)).id;
       _quantity.text = widget.copyFromId != null
           ? copiedQuantity?.toString() ?? ''
           : record?.quantity.toString() ?? '';
@@ -601,6 +605,10 @@ class _EditorPageState extends State<EditorPage> {
       setState(() => _error = 'Vul alle velden in en gebruik een geldig aantal groter dan nul.');
       return;
     }
+    // apply block multiplier if selected
+    final blockChoice = _blocks.firstWhere((c) => c.id == _blockId, orElse: () => Choice(0, '1', defaultQuantity: 1));
+    final multiplier = blockChoice.defaultQuantity ?? 1;
+    final saveQuantity = quantity * multiplier;
     if (widget.recordId == null) {
       final existing = await _database.matchingRecord(
         plantId: _plantId!,
@@ -637,7 +645,7 @@ class _EditorPageState extends State<EditorPage> {
         subDepartmentId: _subDepartmentId!,
         lineId: _lineId!,
         sizeId: _sizeId!,
-        quantity: quantity,
+        quantity: saveQuantity,
       );
       if (mounted) Navigator.pop(context, true);
     } on StateError catch (error) {
@@ -661,7 +669,10 @@ class _EditorPageState extends State<EditorPage> {
                   const SizedBox(height: 12),
                   ChoiceField(label: 'Onderafdeling', choices: _subDepartments, selectedId: _subDepartmentId, onSelected: (choice) => setState(() => _subDepartmentId = choice.id)),
                   const SizedBox(height: 12),
+                  ChoiceField(label: 'Block', choices: _blocks, selectedId: _blockId, onSelected: (choice) => setState(() => _blockId = choice.id)),
+                  const SizedBox(height: 12),
                   ChoiceField(label: 'Lijn', choices: _lines, selectedId: _lineId, onSelected: (choice) => setState(() => _lineId = choice.id)),
+
                   const SizedBox(height: 12),
                   ChoiceField(label: 'Maat', choices: _sizes, selectedId: _sizeId, onSelected: (choice) => setState(() { _sizeId = choice.id; _quantity.text = choice.defaultQuantity?.toString() ?? ''; })),
                   const SizedBox(height: 12),
@@ -714,7 +725,20 @@ class _StockPageState extends State<StockPage> {
     for (final type in MasterType.values) {
       _choices[type] = await _database.choices(type);
     }
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final wasNull = _filter.subDepartmentId == null;
+    setState(() {
+      // If current subDepartmentId is no longer available, clear it.
+      if (_filter.subDepartmentId != null && !(_choices[MasterType.subDepartments] ?? []).any((entry) => entry.id == _filter.subDepartmentId)) {
+        _filter = _filter.copyWith(subDepartmentId: null);
+      }
+      // If there was no subDepartment selected and we have choices, pick the first as default.
+      if (_filter.subDepartmentId == null && (_choices[MasterType.subDepartments] ?? []).isNotEmpty) {
+        _filter = _filter.copyWith(subDepartmentId: (_choices[MasterType.subDepartments] ?? [])[0].id);
+      }
+    });
+    // If previously there was no subDepartment selected and now we set a default, reload to apply it.
+    if (wasNull && _filter.subDepartmentId != null) await reload();
   }
 
   Future<void> reload() async {
@@ -817,14 +841,42 @@ class _StockPageState extends State<StockPage> {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _searchChanged,
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Zoeken op plantnaam...'),
+          if ((_choices[MasterType.subDepartments] ?? const <Choice>[]).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              child: SizedBox(
+                height: 52,
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    for (final subDepartment in _choices[MasterType.subDepartments] ?? const <Choice>[])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          showCheckmark: false,
+                          label: Text(subDepartment.name),
+                          selected: _filter.subDepartmentId == subDepartment.id,
+                          onSelected: (_) => _applySubDepartmentFilter(subDepartment.id),
+                          selectedColor: Theme.of(context).colorScheme.primaryContainer,
+                          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          labelStyle: TextStyle(
+                            color: _filter.subDepartmentId == subDepartment.id
+                                ? Theme.of(context).colorScheme.onPrimaryContainer
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontWeight: _filter.subDepartmentId == subDepartment.id ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                          side: BorderSide(
+                            color: _filter.subDepartmentId == subDepartment.id
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
-          ),
           SizedBox(
             height: 46,
             child: ListView(
@@ -838,6 +890,13 @@ class _StockPageState extends State<StockPage> {
                       selected: _selectedId(type) != null,
                       label: Text(_filterLabel(type)),
                       onSelected: (_) => _chooseQuickFilter(type),
+                      selectedColor: const Color(0xFFDCFCE7),
+                      backgroundColor: const Color(0xFFE5E7EB),
+                      checkmarkColor: Theme.of(context).colorScheme.primary,
+                      labelStyle: TextStyle(
+                        color: _selectedId(type) != null ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface,
+                        fontWeight: _selectedId(type) != null ? FontWeight.w700 : FontWeight.w500,
+                      ),
                     ),
                   ),
               ],
@@ -1061,8 +1120,14 @@ class _ManagementPageState extends State<ManagementPage> {
     final quantity=TextEditingController(text:item?.defaultQuantity?.toString()??'');
     final saved=await showDialog<bool>(context:context,builder:(context)=>AlertDialog(
       title:Text(item==null?'${_type.label} toevoegen':'${_type.label} bewerken'),
-      content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:name,autofocus:true,decoration:const InputDecoration(labelText:'Naam')),if(_type==MasterType.sizes)...[const SizedBox(height:12),TextField(controller:quantity,keyboardType:TextInputType.number,decoration:const InputDecoration(labelText:'Standaardaantal'))]]),
-      actions:[TextButton(onPressed:()=>Navigator.pop(context,false),child:const Text('Annuleren')),FilledButton(onPressed:(){if(name.text.trim().isNotEmpty&&(_type!=MasterType.sizes||int.tryParse(quantity.text)!=null))Navigator.pop(context,true);},child:const Text('Opslaan'))],
+      content:Column(mainAxisSize:MainAxisSize.min,children:[
+        TextField(controller:name,autofocus:true,decoration:const InputDecoration(labelText:'Naam')),
+        if(_type==MasterType.sizes || _type==MasterType.blocks)...[
+          const SizedBox(height:12),
+          TextField(controller:quantity,keyboardType:TextInputType.number,decoration:InputDecoration(labelText: _type==MasterType.sizes ? 'Standaardaantal' : 'Vermenigvuldiger'))
+        ]
+      ]),
+      actions:[TextButton(onPressed:()=>Navigator.pop(context,false),child:const Text('Annuleren')),FilledButton(onPressed:(){if(name.text.trim().isNotEmpty&&(_type!=MasterType.sizes&&_type!=MasterType.blocks||int.tryParse(quantity.text)!=null))Navigator.pop(context,true);},child:const Text('Opslaan'))],
     ));
     if(saved==true){
       try{
@@ -1094,7 +1159,15 @@ class _ManagementPageState extends State<ManagementPage> {
       body:Column(children:[
         SingleChildScrollView(scrollDirection:Axis.horizontal,padding:const EdgeInsets.symmetric(horizontal:8),child:Row(children:[for(final type in MasterType.values)Padding(padding:const EdgeInsets.symmetric(horizontal:3),child:ChoiceChip(label:Text(type.label,maxLines:1),selected:_type==type,onSelected:(_){setState((){_type=type;_loading=true;_search='';});_load();}))])),
         Padding(padding:const EdgeInsets.all(12),child:TextField(onChanged:(value)=>setState(()=>_search=value),decoration:const InputDecoration(prefixIcon:Icon(Icons.search),labelText:'Zoeken...'))),
-        Expanded(child:_loading?const Center(child:CircularProgressIndicator()):filtered.isEmpty?const Center(child:Text('Geen items gevonden.')):ListView.separated(padding:const EdgeInsets.only(bottom:88),itemCount:filtered.length,separatorBuilder:(_,__)=>const Divider(height:1),itemBuilder:(context,index){final item=filtered[index];return ListTile(title:Text(item.name),subtitle:item.defaultQuantity==null?null:Text('Standaardaantal: ${item.defaultQuantity}'),trailing:Wrap(children:[IconButton(onPressed:()=>_editDialog(item),icon:const Icon(Icons.edit),tooltip:'Bewerken'),IconButton(onPressed:()=>_delete(item),icon:const Icon(Icons.delete),tooltip:'Verwijderen')]));})),
+        Expanded(child:_loading?const Center(child:CircularProgressIndicator()):filtered.isEmpty?const Center(child:Text('Geen items gevonden.')):ListView.separated(padding:const EdgeInsets.only(bottom:88),itemCount:filtered.length,separatorBuilder:(_,__)=>const Divider(height:1),itemBuilder:(context,index){final item=filtered[index];return ListTile(
+          title: Text(item.name),
+          subtitle: _type == MasterType.sizes
+              ? Text('Standaardaantal: ${item.defaultQuantity}')
+              : _type == MasterType.blocks
+                  ? Text('Vermenigvuldiger: ${item.defaultQuantity}')
+                  : null,
+          trailing: Wrap(children: [IconButton(onPressed: ()=>_editDialog(item), icon: const Icon(Icons.edit), tooltip: 'Bewerken'), IconButton(onPressed: ()=>_delete(item), icon: const Icon(Icons.delete), tooltip: 'Verwijderen')]),
+        );})),
       ]),
     );
   }
