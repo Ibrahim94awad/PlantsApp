@@ -18,6 +18,7 @@ class InventoryRow {
     required this.id,
     required this.plant,
     required this.department,
+    required this.subDepartment,
     required this.line,
     required this.size,
     required this.quantity,
@@ -29,6 +30,7 @@ class InventoryRow {
         id: map['id'] as int,
         plant: map['plant'] as String,
         department: map['department'] as String,
+        subDepartment: map['subDepartment'] as String,
         line: map['line'] as String,
         size: map['size'] as String,
         quantity: map['quantity'] as int,
@@ -39,6 +41,7 @@ class InventoryRow {
   final int id;
   final String plant;
   final String department;
+  final String subDepartment;
   final String line;
   final String size;
   final int quantity;
@@ -51,6 +54,7 @@ class InventoryRecordData {
     required this.id,
     required this.plantId,
     required this.departmentId,
+    required this.subDepartmentId,
     required this.lineId,
     required this.sizeId,
     required this.quantity,
@@ -62,6 +66,7 @@ class InventoryRecordData {
         id: map['id'] as int,
         plantId: map['plantId'] as int,
         departmentId: map['departmentId'] as int,
+        subDepartmentId: map['subDepartmentId'] as int,
         lineId: map['lineId'] as int,
         sizeId: map['sizeId'] as int,
         quantity: map['quantity'] as int,
@@ -72,6 +77,7 @@ class InventoryRecordData {
   final int id;
   final int plantId;
   final int departmentId;
+  final int subDepartmentId;
   final int lineId;
   final int sizeId;
   final int quantity;
@@ -130,29 +136,32 @@ class PlantInventoryTotal {
 }
 
 class InventoryFilter {
-  const InventoryFilter({this.plantId, this.departmentId, this.lineId, this.sizeId});
+  const InventoryFilter({this.plantId, this.departmentId, this.subDepartmentId, this.lineId, this.sizeId});
 
   final int? plantId;
   final int? departmentId;
+  final int? subDepartmentId;
   final int? lineId;
   final int? sizeId;
 
-  int get activeCount => [plantId, departmentId, lineId, sizeId].where((id) => id != null).length;
+  int get activeCount => [plantId, departmentId, subDepartmentId, lineId, sizeId].where((id) => id != null).length;
 
-  InventoryFilter copyWith({int? plantId, int? departmentId, int? lineId, int? sizeId}) => InventoryFilter(
+  InventoryFilter copyWith({int? plantId, int? departmentId, int? subDepartmentId, int? lineId, int? sizeId}) => InventoryFilter(
         plantId: plantId ?? this.plantId,
         departmentId: departmentId ?? this.departmentId,
+        subDepartmentId: subDepartmentId ?? this.subDepartmentId,
         lineId: lineId ?? this.lineId,
         sizeId: sizeId ?? this.sizeId,
       );
 }
 
-enum MasterType { plants, departments, lines, sizes }
+enum MasterType { plants, departments, subDepartments, lines, sizes }
 
 extension MasterTypeText on MasterType {
   String get label => switch (this) {
         MasterType.plants => 'Planten',
         MasterType.departments => 'Afdelingen',
+        MasterType.subDepartments => 'Onderafdelingen',
         MasterType.lines => 'Lijnen',
         MasterType.sizes => 'Maten',
       };
@@ -160,6 +169,7 @@ extension MasterTypeText on MasterType {
   String get table => switch (this) {
         MasterType.plants => 'plants',
         MasterType.departments => 'departments',
+        MasterType.subDepartments => 'subdepartments',
         MasterType.lines => 'lines',
         MasterType.sizes => 'sizes',
       };
@@ -182,7 +192,7 @@ class AppDatabase {
     final path = await applicationDatabasePath('plantregistratie_flutter.db');
     _database = await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async {
         await db.execute('''CREATE TABLE plants(
@@ -191,6 +201,11 @@ class AppDatabase {
           createdAt INTEGER NOT NULL,
           updatedAt INTEGER NOT NULL)''');
         await db.execute('''CREATE TABLE departments(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          createdAt INTEGER NOT NULL,
+          updatedAt INTEGER NOT NULL)''');
+        await db.execute('''CREATE TABLE subdepartments(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL UNIQUE,
           createdAt INTEGER NOT NULL,
@@ -212,6 +227,7 @@ class AppDatabase {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           plantId INTEGER NOT NULL,
           departmentId INTEGER NOT NULL,
+          subDepartmentId INTEGER NOT NULL,
           lineId INTEGER NOT NULL,
           sizeId INTEGER NOT NULL,
           quantity INTEGER NOT NULL CHECK(quantity >= 0),
@@ -220,6 +236,7 @@ class AppDatabase {
           updatedAt INTEGER NOT NULL,
           FOREIGN KEY(plantId) REFERENCES plants(id) ON DELETE RESTRICT,
           FOREIGN KEY(departmentId) REFERENCES departments(id) ON DELETE RESTRICT,
+          FOREIGN KEY(subDepartmentId) REFERENCES subdepartments(id) ON DELETE RESTRICT,
           FOREIGN KEY(lineId) REFERENCES lines(id) ON DELETE RESTRICT,
           FOREIGN KEY(sizeId) REFERENCES sizes(id) ON DELETE RESTRICT)''');
         await db.execute('''CREATE TABLE inventory_history(
@@ -229,69 +246,87 @@ class AppDatabase {
           action TEXT NOT NULL,
           createdAt INTEGER NOT NULL,
           FOREIGN KEY(inventoryId) REFERENCES inventory_records(id) ON DELETE RESTRICT)''');
-        for (final column in ['plantId', 'departmentId', 'lineId', 'sizeId']) {
+        for (final column in ['plantId', 'departmentId', 'subDepartmentId', 'lineId', 'sizeId']) {
           await db.execute('CREATE INDEX index_inventory_$column ON inventory_records($column)');
         }
-        await db.execute('CREATE UNIQUE INDEX index_inventory_position ON inventory_records(plantId, departmentId, lineId, sizeId)');
+        await db.execute('CREATE UNIQUE INDEX index_inventory_position ON inventory_records(plantId, departmentId, subDepartmentId, lineId, sizeId)');
         await db.execute('CREATE INDEX index_inventory_active ON inventory_records(isActive)');
         await db.execute('CREATE INDEX index_history_inventory_date ON inventory_history(inventoryId, createdAt DESC)');
         await db.execute('CREATE INDEX index_plants_name ON plants(name COLLATE NOCASE)');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await db.execute('ALTER TABLE inventory_records RENAME TO inventory_records_legacy');
-          await db.execute('''CREATE TABLE inventory_records(
+        if (oldVersion < 3) {
+          await db.execute('''CREATE TABLE subdepartments(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            plantId INTEGER NOT NULL,
-            departmentId INTEGER NOT NULL,
-            lineId INTEGER NOT NULL,
-            sizeId INTEGER NOT NULL,
-            quantity INTEGER NOT NULL CHECK(quantity >= 0),
-            isActive INTEGER NOT NULL DEFAULT 1,
+            name TEXT NOT NULL UNIQUE,
             createdAt INTEGER NOT NULL,
-            updatedAt INTEGER NOT NULL,
-            FOREIGN KEY(plantId) REFERENCES plants(id) ON DELETE RESTRICT,
-            FOREIGN KEY(departmentId) REFERENCES departments(id) ON DELETE RESTRICT,
-            FOREIGN KEY(lineId) REFERENCES lines(id) ON DELETE RESTRICT,
-            FOREIGN KEY(sizeId) REFERENCES sizes(id) ON DELETE RESTRICT)''');
-          await db.execute('''CREATE TABLE inventory_history(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            inventoryId INTEGER NOT NULL,
-            changeAmount INTEGER NOT NULL,
-            action TEXT NOT NULL,
-            createdAt INTEGER NOT NULL,
-            FOREIGN KEY(inventoryId) REFERENCES inventory_records(id) ON DELETE RESTRICT)''');
-          await db.execute('''INSERT INTO inventory_records(
-              plantId, departmentId, lineId, sizeId, quantity, isActive, createdAt, updatedAt)
-            SELECT plantId, departmentId, lineId, sizeId, SUM(quantity), 1,
-                   MIN(createdAt), MAX(updatedAt)
-            FROM inventory_records_legacy
-            GROUP BY plantId, departmentId, lineId, sizeId''');
-          await db.execute('''INSERT INTO inventory_history(
-              inventoryId, changeAmount, action, createdAt)
-            SELECT current.id, legacy.quantity,
-              CASE WHEN legacy.id = (
-                SELECT earliest.id FROM inventory_records_legacy earliest
-                WHERE earliest.plantId = legacy.plantId
-                  AND earliest.departmentId = legacy.departmentId
-                  AND earliest.lineId = legacy.lineId
-                  AND earliest.sizeId = legacy.sizeId
-                ORDER BY earliest.createdAt, earliest.id LIMIT 1
-              ) THEN 'created' ELSE 'added' END,
-              legacy.createdAt
-            FROM inventory_records_legacy legacy
-            JOIN inventory_records current
-              ON current.plantId = legacy.plantId
-             AND current.departmentId = legacy.departmentId
-             AND current.lineId = legacy.lineId
-             AND current.sizeId = legacy.sizeId''');
-          await db.execute('DROP TABLE inventory_records_legacy');
-          for (final column in ['plantId', 'departmentId', 'lineId', 'sizeId']) {
-            await db.execute('CREATE INDEX index_inventory_$column ON inventory_records($column)');
+            updatedAt INTEGER NOT NULL)''');
+          final stamp = _now();
+          await db.execute('INSERT INTO subdepartments(name, createdAt, updatedAt) VALUES (?, ?, ?)', ['Algemeen', stamp, stamp]);
+          if (oldVersion < 2) {
+            await db.execute('ALTER TABLE inventory_records RENAME TO inventory_records_legacy');
+            await db.execute('''CREATE TABLE inventory_records(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              plantId INTEGER NOT NULL,
+              departmentId INTEGER NOT NULL,
+              subDepartmentId INTEGER NOT NULL,
+              lineId INTEGER NOT NULL,
+              sizeId INTEGER NOT NULL,
+              quantity INTEGER NOT NULL CHECK(quantity >= 0),
+              isActive INTEGER NOT NULL DEFAULT 1,
+              createdAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL,
+              FOREIGN KEY(plantId) REFERENCES plants(id) ON DELETE RESTRICT,
+              FOREIGN KEY(departmentId) REFERENCES departments(id) ON DELETE RESTRICT,
+              FOREIGN KEY(subDepartmentId) REFERENCES subdepartments(id) ON DELETE RESTRICT,
+              FOREIGN KEY(lineId) REFERENCES lines(id) ON DELETE RESTRICT,
+              FOREIGN KEY(sizeId) REFERENCES sizes(id) ON DELETE RESTRICT)''');
+            await db.execute('''CREATE TABLE inventory_history(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              inventoryId INTEGER NOT NULL,
+              changeAmount INTEGER NOT NULL,
+              action TEXT NOT NULL,
+              createdAt INTEGER NOT NULL,
+              FOREIGN KEY(inventoryId) REFERENCES inventory_records(id) ON DELETE RESTRICT)''');
+            await db.execute('''INSERT INTO inventory_records(
+                plantId, departmentId, subDepartmentId, lineId, sizeId, quantity, isActive, createdAt, updatedAt)
+              SELECT plantId, departmentId, (SELECT id FROM subdepartments WHERE name = 'Algemeen' LIMIT 1), lineId, sizeId, SUM(quantity), 1,
+                     MIN(createdAt), MAX(updatedAt)
+              FROM inventory_records_legacy
+              GROUP BY plantId, departmentId, lineId, sizeId''');
+            await db.execute('''INSERT INTO inventory_history(
+                inventoryId, changeAmount, action, createdAt)
+              SELECT current.id, legacy.quantity,
+                CASE WHEN legacy.id = (
+                  SELECT earliest.id FROM inventory_records_legacy earliest
+                  WHERE earliest.plantId = legacy.plantId
+                    AND earliest.departmentId = legacy.departmentId
+                    AND earliest.lineId = legacy.lineId
+                    AND earliest.sizeId = legacy.sizeId
+                  ORDER BY earliest.createdAt, earliest.id LIMIT 1
+                ) THEN 'created' ELSE 'added' END,
+                legacy.createdAt
+              FROM inventory_records_legacy legacy
+              JOIN inventory_records current
+                ON current.plantId = legacy.plantId
+               AND current.departmentId = legacy.departmentId
+               AND current.lineId = legacy.lineId
+               AND current.sizeId = legacy.sizeId''');
+            await db.execute('DROP TABLE inventory_records_legacy');
+            for (final column in ['plantId', 'departmentId', 'subDepartmentId', 'lineId', 'sizeId']) {
+              await db.execute('CREATE INDEX index_inventory_$column ON inventory_records($column)');
+            }
+            await db.execute('CREATE UNIQUE INDEX index_inventory_position ON inventory_records(plantId, departmentId, subDepartmentId, lineId, sizeId)');
+            await db.execute('CREATE INDEX index_inventory_active ON inventory_records(isActive)');
+            await db.execute('CREATE INDEX index_history_inventory_date ON inventory_history(inventoryId, createdAt DESC)');
+          } else {
+            await db.execute('ALTER TABLE inventory_records ADD COLUMN subDepartmentId INTEGER NOT NULL DEFAULT 0');
+            await db.execute('UPDATE inventory_records SET subDepartmentId = (SELECT id FROM subdepartments WHERE name = ? LIMIT 1)', ['Algemeen']);
+            await db.execute('CREATE INDEX index_inventory_subDepartmentId ON inventory_records(subDepartmentId)');
+            await db.execute('DROP INDEX IF EXISTS index_inventory_position');
+            await db.execute('CREATE UNIQUE INDEX index_inventory_position ON inventory_records(plantId, departmentId, subDepartmentId, lineId, sizeId)');
+            await db.execute('PRAGMA foreign_key_check');
           }
-          await db.execute('CREATE UNIQUE INDEX index_inventory_position ON inventory_records(plantId, departmentId, lineId, sizeId)');
-          await db.execute('CREATE INDEX index_inventory_active ON inventory_records(isActive)');
-          await db.execute('CREATE INDEX index_history_inventory_date ON inventory_history(inventoryId, createdAt DESC)');
         }
       },
     );
@@ -396,6 +431,9 @@ class AppDatabase {
       }
       await batch.commit(noResult: true);
     }
+    if (await _count('subdepartments') == 0) {
+      await database.insert('subdepartments', {'name': 'Algemeen', 'createdAt': stamp, 'updatedAt': stamp}, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
     if (await _count('lines') == 0) {
       final batch = database.batch();
       for (var number = 1; number <= 50; number++) {
@@ -413,7 +451,10 @@ class AppDatabase {
   }
 
   Future<List<Choice>> choices(MasterType type, {int? departmentId}) async {
-    final where = type == MasterType.lines && departmentId != null ? '(departmentId IS NULL OR departmentId = ?)' : null;
+    final where = switch (type) {
+      MasterType.lines => departmentId != null ? '(departmentId IS NULL OR departmentId = ?)' : null,
+      _ => null,
+    };
     final rows = await database.query(type.table, where: where, whereArgs: where == null ? null : [departmentId], orderBy: 'name COLLATE NOCASE');
     return rows.map((row) => Choice(row['id'] as int, row['name'] as String, defaultQuantity: row['defaultQuantity'] as int?)).toList();
   }
@@ -423,12 +464,13 @@ class AppDatabase {
     final args = <Object?>[];
     final term = search.trim().toLowerCase();
     if (term.isNotEmpty) {
-      where.add('(lower(p.name) LIKE ? OR lower(d.name) LIKE ? OR lower(l.name) LIKE ? OR lower(s.name) LIKE ?)');
-      args.addAll(List.filled(4, '%$term%'));
+      where.add('(lower(p.name) LIKE ? OR lower(d.name) LIKE ? OR lower(sd.name) LIKE ? OR lower(l.name) LIKE ? OR lower(s.name) LIKE ?)');
+      args.addAll(List.filled(5, '%$term%'));
     }
     for (final entry in {
       'r.plantId': filter.plantId,
       'r.departmentId': filter.departmentId,
+      'r.subDepartmentId': filter.subDepartmentId,
       'r.lineId': filter.lineId,
       'r.sizeId': filter.sizeId,
     }.entries) {
@@ -438,11 +480,12 @@ class AppDatabase {
       }
     }
     final rows = await database.rawQuery('''
-      SELECT r.id, p.name plant, d.name department, l.name line, s.name size,
+      SELECT r.id, p.name plant, d.name department, sd.name subDepartment, l.name line, s.name size,
              r.quantity, r.createdAt, r.updatedAt
       FROM inventory_records r
       JOIN plants p ON p.id = r.plantId
       JOIN departments d ON d.id = r.departmentId
+      JOIN subdepartments sd ON sd.id = r.subDepartmentId
       JOIN lines l ON l.id = r.lineId
       JOIN sizes s ON s.id = r.sizeId
       ${where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}'}
@@ -459,26 +502,27 @@ class AppDatabase {
   Future<InventoryRecordData?> matchingRecord({
     required int plantId,
     required int departmentId,
+    required int subDepartmentId,
     required int lineId,
     required int sizeId,
     int? excludingId,
   }) async {
     final rows = await database.query(
       'inventory_records',
-      where: 'plantId = ? AND departmentId = ? AND lineId = ? AND sizeId = ? AND isActive = 1${excludingId == null ? '' : ' AND id != ?'}',
-      whereArgs: [plantId, departmentId, lineId, sizeId, if (excludingId != null) excludingId],
+      where: 'plantId = ? AND departmentId = ? AND subDepartmentId = ? AND lineId = ? AND sizeId = ? AND isActive = 1${excludingId == null ? '' : ' AND id != ?'}',
+      whereArgs: [plantId, departmentId, subDepartmentId, lineId, sizeId, if (excludingId != null) excludingId],
       limit: 1,
     );
     return rows.isEmpty ? null : InventoryRecordData.fromMap(rows.first);
   }
 
-  Future<SaveResult> saveRecord({int? id, required int plantId, required int departmentId, required int lineId, required int sizeId, required int quantity}) async {
+  Future<SaveResult> saveRecord({int? id, required int plantId, required int departmentId, required int subDepartmentId, required int lineId, required int sizeId, required int quantity}) async {
     final stamp = _now();
     return database.transaction((transaction) async {
       final matches = await transaction.query(
         'inventory_records',
-        where: 'plantId = ? AND departmentId = ? AND lineId = ? AND sizeId = ?${id == null ? '' : ' AND id != ?'}',
-        whereArgs: [plantId, departmentId, lineId, sizeId, if (id != null) id],
+        where: 'plantId = ? AND departmentId = ? AND subDepartmentId = ? AND lineId = ? AND sizeId = ?${id == null ? '' : ' AND id != ?'}',
+        whereArgs: [plantId, departmentId, subDepartmentId, lineId, sizeId, if (id != null) id],
         limit: 1,
       );
       if (id == null && matches.isNotEmpty) {
@@ -503,6 +547,7 @@ class AppDatabase {
         final newId = await transaction.insert('inventory_records', {
           'plantId': plantId,
           'departmentId': departmentId,
+          'subDepartmentId': subDepartmentId,
           'lineId': lineId,
           'sizeId': sizeId,
           'quantity': quantity,
@@ -526,11 +571,12 @@ class AppDatabase {
       if (sourceRows.isEmpty) throw StateError('Registratie niet gevonden.');
       final source = sourceRows.first;
       final previous = source['quantity'] as int;
-      final positionChanged = source['plantId'] != plantId || source['departmentId'] != departmentId || source['lineId'] != lineId || source['sizeId'] != sizeId;
+      final positionChanged = source['plantId'] != plantId || source['departmentId'] != departmentId || source['subDepartmentId'] != subDepartmentId || source['lineId'] != lineId || source['sizeId'] != sizeId;
       final difference = quantity - previous;
       await transaction.update('inventory_records', {
         'plantId': plantId,
         'departmentId': departmentId,
+        'subDepartmentId': subDepartmentId,
         'lineId': lineId,
         'sizeId': sizeId,
         'quantity': quantity,
@@ -601,6 +647,7 @@ class AppDatabase {
     for (final entry in {
       'r.plantId': filter.plantId,
       'r.departmentId': filter.departmentId,
+      'r.subDepartmentId': filter.subDepartmentId,
       'r.lineId': filter.lineId,
       'r.sizeId': filter.sizeId,
     }.entries) {
@@ -643,6 +690,7 @@ class AppDatabase {
     final usageSql = switch (type) {
       MasterType.plants => 'SELECT COUNT(*) FROM inventory_records WHERE plantId = ?',
       MasterType.departments => 'SELECT COUNT(*) FROM inventory_records WHERE departmentId = ? OR lineId IN (SELECT id FROM lines WHERE departmentId = ?)',
+      MasterType.subDepartments => 'SELECT COUNT(*) FROM inventory_records WHERE subDepartmentId = ?',
       MasterType.lines => 'SELECT COUNT(*) FROM inventory_records WHERE lineId = ?',
       MasterType.sizes => 'SELECT COUNT(*) FROM inventory_records WHERE sizeId = ?',
     };
