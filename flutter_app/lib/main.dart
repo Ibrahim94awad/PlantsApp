@@ -15,16 +15,54 @@ class PlantsApp extends StatelessWidget {
   const PlantsApp({super.key});
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'Plantregistratie',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff397047)),
-          useMaterial3: true,
-          inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
+  Widget build(BuildContext context) {
+    final colorScheme = ColorScheme.fromSeed(seedColor: const Color(0xff397047));
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Plantregistratie',
+      theme: ThemeData(
+        colorScheme: colorScheme,
+        useMaterial3: true,
+        inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
         ),
-        home: const HomePage(),
-      );
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: colorScheme.secondary,
+            side: BorderSide(color: colorScheme.secondary.withOpacity(0.9)),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: colorScheme.tertiary,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+        ),
+        floatingActionButtonTheme: FloatingActionButtonThemeData(
+          backgroundColor: colorScheme.secondaryContainer,
+          foregroundColor: colorScheme.onSecondaryContainer,
+        ),
+        chipTheme: ChipThemeData(
+          backgroundColor: colorScheme.surfaceVariant,
+          selectedColor: colorScheme.primaryContainer,
+          secondarySelectedColor: colorScheme.secondaryContainer,
+          labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+          secondaryLabelStyle: TextStyle(color: colorScheme.onPrimaryContainer),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+      home: const HomePage(),
+    );
+  }
 }
 
 String formatQuantity(int value) {
@@ -124,6 +162,7 @@ class ChoiceField extends StatelessWidget {
     required this.selectedId,
     required this.onSelected,
     this.allowClear = false,
+    this.onClear,
   });
 
   final String label;
@@ -131,6 +170,7 @@ class ChoiceField extends StatelessWidget {
   final int? selectedId;
   final ValueChanged<Choice> onSelected;
   final bool allowClear;
+  final VoidCallback? onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -148,7 +188,12 @@ class ChoiceField extends StatelessWidget {
         decoration: InputDecoration(
           labelText: label,
           suffixIcon: allowClear && selected != null
-              ? const Icon(Icons.close)
+              ? IconButton(
+                  onPressed: onClear,
+                  tooltip: 'Wis selectie',
+                  splashRadius: 18,
+                  icon: const Icon(Icons.close),
+                )
               : const Icon(Icons.arrow_drop_down),
         ),
         child: Text(selected?.name ?? 'Selecteer $label', maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -215,12 +260,15 @@ class _InventoryPageState extends State<InventoryPage> {
   final _searchController = TextEditingController();
   InventoryFilter _filter = const InventoryFilter();
   List<InventoryRow> _rows = const [];
+  List<Choice> _subDepartments = const [];
+  Map<int,int> _subCounts = {};
   bool _loading = true;
   Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
+    _loadSubDepartments();
     _reload();
   }
 
@@ -231,10 +279,28 @@ class _InventoryPageState extends State<InventoryPage> {
     super.dispose();
   }
 
+  Future<void> _loadSubDepartments() async {
+    final subDepartments = await _database.choices(MasterType.subDepartments);
+    if (!mounted) return;
+    setState(() {
+      _subDepartments = subDepartments;
+      if (_filter.subDepartmentId != null && !subDepartments.any((entry) => entry.id == _filter.subDepartmentId)) {
+        _filter = _filter.copyWith(subDepartmentId: null);
+      }
+    });
+  }
+
   Future<void> _reload() async {
     if (mounted) setState(() => _loading = true);
     final rows = await _database.inventory(_searchController.text, _filter);
-    if (mounted) setState(() { _rows = rows; _loading = false; });
+    // also compute counts per subDepartment based on the same search but without subDepartment filter
+    final countsRows = await _database.inventory(_searchController.text, _filter.copyWith(subDepartmentId: null));
+    final Map<int,int> counts = {};
+    final choices = _subDepartments.isEmpty ? await _database.choices(MasterType.subDepartments) : _subDepartments;
+    for (final choice in choices) {
+      counts[choice.id] = countsRows.where((r) => r.subDepartment == choice.name).length;
+    }
+    if (mounted) setState(() { _rows = rows; _subCounts = counts; _loading = false; });
   }
 
   void _searchChanged(String value) {
@@ -242,8 +308,24 @@ class _InventoryPageState extends State<InventoryPage> {
     _debounce = Timer(const Duration(milliseconds: 250), _reload);
   }
 
+  void _applySubDepartmentFilter(int? subDepartmentId) {
+    setState(() {
+      _filter = _filter.copyWith(subDepartmentId: subDepartmentId);
+    });
+    _reload();
+  }
+
   Future<void> _openEditor([int? id, int? copyFromId]) async {
-    final changed = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => EditorPage(recordId: id, copyFromId: copyFromId)));
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditorPage(
+          recordId: id,
+          copyFromId: copyFromId,
+          initialSubDepartmentId: _filter.subDepartmentId,
+        ),
+      ),
+    );
     if (changed == true) await _reload();
   }
 
@@ -266,8 +348,8 @@ class _InventoryPageState extends State<InventoryPage> {
         title: const Text('Registratie verwijderen?'),
         content: const Text('Weet je zeker dat je deze registratie wilt verwijderen?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuleren')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Verwijderen')),
+                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuleren')),
+                  FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Verwijderen')),
         ],
       ),
     );
@@ -283,9 +365,16 @@ class _InventoryPageState extends State<InventoryPage> {
     for (final row in _rows) {
       grouped.putIfAbsent(dateOnly(row.updatedAt), () => []).add(row);
     }
+    Choice? selectedSubDepartment;
+    for (final entry in _subDepartments) {
+      if (entry.id == _filter.subDepartmentId) {
+        selectedSubDepartment = entry;
+        break;
+      }
+    }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Registraties'),
+        title: Text(selectedSubDepartment == null ? 'Registraties' : 'Registraties • ${selectedSubDepartment.name}'),
         actions: [
           IconButton(
             tooltip: 'Filters',
@@ -300,16 +389,17 @@ class _InventoryPageState extends State<InventoryPage> {
             tooltip: 'Beheer',
             onPressed: () async {
               await Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ManagementPage()));
-              await _reload();
+                            await _loadSubDepartments();
+                            await _reload();
             },
             icon: const Icon(Icons.settings),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () => _openEditor(),
-        icon: const Icon(Icons.add),
-        label: const Text('Nieuwe registratie'),
+        tooltip: 'Nieuwe registratie',
+        child: const Icon(Icons.add),
       ),
       body: Column(
         children: [
@@ -321,6 +411,25 @@ class _InventoryPageState extends State<InventoryPage> {
               decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Zoeken...'),
             ),
           ),
+          if (_subDepartments.isNotEmpty)
+           SizedBox(
+             height: 48,
+             child: ListView(
+               padding: const EdgeInsets.symmetric(horizontal: 12),
+               scrollDirection: Axis.horizontal,
+               children: [
+                 for (final subDepartment in _subDepartments)
+                   Padding(
+                     padding: const EdgeInsets.only(right: 8),
+                     child: ChoiceChip(
+                       label: Text('${subDepartment.name} (${_subCounts[subDepartment.id] ?? 0})'),
+                       selected: _filter.subDepartmentId == subDepartment.id,
+                       onSelected: (_) => _applySubDepartmentFilter(subDepartment.id),
+                     ),
+                   ),
+               ],
+             ),
+           ),
           if (_filter.activeCount > 0)
             Container(
               margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
@@ -397,15 +506,15 @@ class _InventoryCard extends StatelessWidget {
                 Text('Nr. ${row.id}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)),
               ]),
               const SizedBox(height: 4),
-              Text('${row.department}  •  ${row.line}  •  ${row.size}  •  ${formatQuantity(row.quantity)}'),
+              Text('${row.department}  •  ${row.subDepartment}  •  ${row.line}  •  ${row.size}  •  ${formatQuantity(row.quantity)}'),
               Text('Aangemaakt: ${formatDateTime(row.createdAt)}', style: Theme.of(context).textTheme.labelSmall),
               Text('Laatst gewijzigd: ${formatDateTime(row.updatedAt)}', style: Theme.of(context).textTheme.labelSmall),
               Wrap(
                 children: [
-                  TextButton(onPressed: onEdit, child: const Text('Bewerken')),
-                  TextButton(onPressed: onCopy, child: const Text('Kopiëren')),
-                  TextButton(onPressed: onHistory, child: const Text('Geschiedenis')),
-                  TextButton(onPressed: onDelete, child: const Text('Verwijderen')),
+                  IconButton(onPressed: onEdit, icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.primary), tooltip: 'Bewerken'),
+                  IconButton(onPressed: onCopy, icon: Icon(Icons.copy, color: Colors.teal), tooltip: 'Kopiëren'),
+                  IconButton(onPressed: onHistory, icon: Icon(Icons.history, color: Colors.grey), tooltip: 'Geschiedenis'),
+                  IconButton(onPressed: onDelete, icon: Icon(Icons.delete, color: Colors.red), tooltip: 'Verwijderen'),
                 ],
               ),
             ],
@@ -415,9 +524,10 @@ class _InventoryCard extends StatelessWidget {
 }
 
 class EditorPage extends StatefulWidget {
-  const EditorPage({super.key, this.recordId, this.copyFromId});
+  const EditorPage({super.key, this.recordId, this.copyFromId, this.initialSubDepartmentId});
   final int? recordId;
   final int? copyFromId;
+  final int? initialSubDepartmentId;
 
   @override
   State<EditorPage> createState() => _EditorPageState();
@@ -428,10 +538,12 @@ class _EditorPageState extends State<EditorPage> {
   final _quantity = TextEditingController();
   List<Choice> _plants = const [];
   List<Choice> _departments = const [];
+  List<Choice> _subDepartments = const [];
   List<Choice> _lines = const [];
   List<Choice> _sizes = const [];
   int? _plantId;
   int? _departmentId;
+  int? _subDepartmentId;
   int? _lineId;
   int? _sizeId;
   bool _loading = true;
@@ -454,6 +566,7 @@ class _EditorPageState extends State<EditorPage> {
     final values = await Future.wait([
       _database.choices(MasterType.plants),
       _database.choices(MasterType.departments),
+      _database.choices(MasterType.subDepartments),
       _database.choices(MasterType.lines),
       _database.choices(MasterType.sizes),
     ]);
@@ -462,15 +575,17 @@ class _EditorPageState extends State<EditorPage> {
     if (sourceId != null) record = await _database.record(sourceId);
     final copiedQuantity = widget.copyFromId == null
         ? null
-        : defaultQuantityForSize(values[3], record?.sizeId);
+        : defaultQuantityForSize(values[4], record?.sizeId);
     if (!mounted) return;
     setState(() {
       _plants = values[0];
       _departments = values[1];
-      _lines = values[2];
-      _sizes = values[3];
+      _subDepartments = values[2];
+      _lines = values[3];
+      _sizes = values[4];
       _plantId = record?.plantId;
       _departmentId = record?.departmentId;
+      _subDepartmentId = record?.subDepartmentId ?? widget.initialSubDepartmentId;
       _lineId = record?.lineId;
       _sizeId = record?.sizeId;
       _quantity.text = widget.copyFromId != null
@@ -482,7 +597,7 @@ class _EditorPageState extends State<EditorPage> {
 
   Future<void> _save() async {
     final quantity = int.tryParse(_quantity.text);
-    if (_plantId == null || _departmentId == null || _lineId == null || _sizeId == null || quantity == null || quantity <= 0) {
+    if (_plantId == null || _departmentId == null || _subDepartmentId == null || _lineId == null || _sizeId == null || quantity == null || quantity <= 0) {
       setState(() => _error = 'Vul alle velden in en gebruik een geldig aantal groter dan nul.');
       return;
     }
@@ -490,6 +605,7 @@ class _EditorPageState extends State<EditorPage> {
       final existing = await _database.matchingRecord(
         plantId: _plantId!,
         departmentId: _departmentId!,
+        subDepartmentId: _subDepartmentId!,
         lineId: _lineId!,
         sizeId: _sizeId!,
       );
@@ -504,8 +620,8 @@ class _EditorPageState extends State<EditorPage> {
               'Nieuw totaal: ${formatQuantity(existing.quantity + quantity)}',
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuleren')),
-              FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Toevoegen aan bestaande registratie')),
+                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuleren')),
+                          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Toevoegen aan bestaande registratie')),
             ],
           ),
         );
@@ -518,6 +634,7 @@ class _EditorPageState extends State<EditorPage> {
         id: widget.recordId,
         plantId: _plantId!,
         departmentId: _departmentId!,
+        subDepartmentId: _subDepartmentId!,
         lineId: _lineId!,
         sizeId: _sizeId!,
         quantity: quantity,
@@ -541,6 +658,8 @@ class _EditorPageState extends State<EditorPage> {
                   ChoiceField(label: 'Plant', choices: _plants, selectedId: _plantId, onSelected: (choice) => setState(() => _plantId = choice.id)),
                   const SizedBox(height: 12),
                   ChoiceField(label: 'Afdeling', choices: _departments, selectedId: _departmentId, onSelected: (choice) => setState(() { _departmentId = choice.id; _lineId = null; })),
+                  const SizedBox(height: 12),
+                  ChoiceField(label: 'Onderafdeling', choices: _subDepartments, selectedId: _subDepartmentId, onSelected: (choice) => setState(() => _subDepartmentId = choice.id)),
                   const SizedBox(height: 12),
                   ChoiceField(label: 'Lijn', choices: _lines, selectedId: _lineId, onSelected: (choice) => setState(() => _lineId = choice.id)),
                   const SizedBox(height: 12),
@@ -614,6 +733,13 @@ class _StockPageState extends State<StockPage> {
     });
   }
 
+  Future<void> _applySubDepartmentFilter(int? subDepartmentId) async {
+    setState(() {
+      _filter = _filter.copyWith(subDepartmentId: subDepartmentId);
+    });
+    await reload();
+  }
+
   void _searchChanged(String value) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), reload);
@@ -622,6 +748,7 @@ class _StockPageState extends State<StockPage> {
   int? _selectedId(MasterType type) => switch (type) {
         MasterType.plants => _filter.plantId,
         MasterType.departments => _filter.departmentId,
+        MasterType.subDepartments => _filter.subDepartmentId,
         MasterType.lines => _filter.lineId,
         MasterType.sizes => _filter.sizeId,
       };
@@ -632,6 +759,7 @@ class _StockPageState extends State<StockPage> {
       return switch (type) {
         MasterType.plants => 'Plant',
         MasterType.departments => 'Afdeling',
+        MasterType.subDepartments => 'Onderafdeling',
         MasterType.lines => 'Lijn',
         MasterType.sizes => 'Maat',
       };
@@ -653,6 +781,7 @@ class _StockPageState extends State<StockPage> {
       _filter = InventoryFilter(
         plantId: type == MasterType.plants ? selected.id : _filter.plantId,
         departmentId: type == MasterType.departments ? selected.id : _filter.departmentId,
+        subDepartmentId: type == MasterType.subDepartments ? selected.id : _filter.subDepartmentId,
         lineId: type == MasterType.lines ? selected.id : _filter.lineId,
         sizeId: type == MasterType.sizes ? selected.id : _filter.sizeId,
       );
@@ -674,99 +803,110 @@ class _StockPageState extends State<StockPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Voorraad')),
-        body: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-              child: TextField(
-                controller: _searchController,
-                onChanged: _searchChanged,
-                decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Zoeken op plantnaam...'),
-              ),
+  Widget build(BuildContext context) {
+    Choice? selectedSubDepartment;
+    for (final entry in _choices[MasterType.subDepartments] ?? const <Choice>[]) {
+      if (entry.id == _filter.subDepartmentId) {
+        selectedSubDepartment = entry;
+        break;
+      }
+    }
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(selectedSubDepartment == null ? 'Voorraad' : 'Voorraad • ${selectedSubDepartment.name}'),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+            child: TextField(
+              controller: _searchController,
+              onChanged: _searchChanged,
+              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Zoeken op plantnaam...'),
             ),
-            SizedBox(
-              height: 46,
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                scrollDirection: Axis.horizontal,
-                children: [
-                  for (final type in MasterType.values)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        selected: _selectedId(type) != null,
-                        label: Text(_filterLabel(type)),
-                        onSelected: (_) => _chooseQuickFilter(type),
-                      ),
+          ),
+          SizedBox(
+            height: 46,
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final type in MasterType.values.where((t) => t != MasterType.subDepartments))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      selected: _selectedId(type) != null,
+                      label: Text(_filterLabel(type)),
+                      onSelected: (_) => _chooseQuickFilter(type),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-              child: Row(
-                children: [
-                  OutlinedButton.icon(onPressed: _openFilters, icon: const Icon(Icons.filter_list), label: const Text('Filters')),
-                  const SizedBox(width: 8),
-                  TextButton(onPressed: _filter.activeCount == 0 && _searchController.text.isEmpty ? null : _clearFilters, child: const Text('Wis filters')),
-                ],
-              ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            child: Row(
+              children: [
+                OutlinedButton.icon(onPressed: _openFilters, icon: const Icon(Icons.filter_list), label: const Text('Filters')),
+                const SizedBox(width: 8),
+                                TextButton(onPressed: _filter.activeCount == 0 && _searchController.text.isEmpty ? null : _clearFilters, child: const Text('Wis filters')),
+              ],
             ),
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Text(
-                '${_filter.activeCount == 0 && _searchController.text.isEmpty ? 'Totaal aantal planten' : 'Totaal'}: ${formatQuantity(_total)}',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
+          ),
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(14),
             ),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _plants.isEmpty
-                      ? const Center(child: Text('Geen voorraad gevonden.'))
-                      : RefreshIndicator(
-                          onRefresh: reload,
-                          child: ListView.builder(
-                            padding: const EdgeInsets.only(bottom: 24),
-                            itemCount: _plants.length,
-                            itemBuilder: (context, index) {
-                              final plant = _plants[index];
-                              final rows = _details.where((row) => row.plant == plant.plant).toList();
-                              return Card(
-                                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                                child: ExpansionTile(
-                                  title: Row(
-                                    children: [
-                                      Expanded(child: Text(plant.plant, style: const TextStyle(fontWeight: FontWeight.w600))),
-                                      Text(formatQuantity(plant.quantity), style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
+            child: Text(
+              '${_filter.activeCount == 0 && _searchController.text.isEmpty ? 'Totaal aantal planten' : 'Totaal'}: ${formatQuantity(_total)}',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _plants.isEmpty
+                    ? const Center(child: Text('Geen voorraad gevonden.'))
+                    : RefreshIndicator(
+                        onRefresh: reload,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          itemCount: _plants.length,
+                          itemBuilder: (context, index) {
+                            final plant = _plants[index];
+                            final rows = _details.where((row) => row.plant == plant.plant).toList();
+                            return Card(
+                              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                              child: ExpansionTile(
+                                title: Row(
                                   children: [
-                                    for (final row in rows)
-                                      ListTile(
-                                        title: Text('${row.department} • ${row.line} • ${row.size}'),
-                                        subtitle: Text('Laatst gewijzigd: ${formatDateTime(row.updatedAt)}'),
-                                        trailing: Text(formatQuantity(row.quantity), style: const TextStyle(fontWeight: FontWeight.bold)),
-                                        onTap: () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => HistoryPage(row: row))),
-                                      ),
+                                    Expanded(child: Text(plant.plant, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                    Text(formatQuantity(plant.quantity), style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
                                   ],
                                 ),
-                              );
-                            },
-                          ),
+                                children: [
+                                  for (final row in rows)
+                                    ListTile(
+                                      title: Text('${row.department} • ${row.subDepartment} • ${row.line} • ${row.size}'),
+                                      subtitle: Text('Laatst gewijzigd: ${formatDateTime(row.updatedAt)}'),
+                                      trailing: Text(formatQuantity(row.quantity), style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      onTap: () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => HistoryPage(row: row))),
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
-            ),
-          ],
-        ),
-      );
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class HistoryPage extends StatefulWidget {
@@ -798,7 +938,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(widget.row.plant, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  Text('${widget.row.department} • ${widget.row.line} • ${widget.row.size}'),
+                  Text('${widget.row.department} • ${widget.row.subDepartment} • ${widget.row.line} • ${widget.row.size}'),
                   const SizedBox(height: 8),
                   Text('Huidige voorraad: ${formatQuantity(widget.row.quantity)}', style: Theme.of(context).textTheme.titleMedium),
                 ],
@@ -846,6 +986,7 @@ class _FiltersPageState extends State<FiltersPage> {
   final _database = AppDatabase.instance;
   List<Choice> _plants = const [];
   List<Choice> _departments = const [];
+  List<Choice> _subDepartments = const [];
   List<Choice> _lines = const [];
   List<Choice> _sizes = const [];
   late InventoryFilter _filter = widget.initial;
@@ -861,10 +1002,11 @@ class _FiltersPageState extends State<FiltersPage> {
     final values = await Future.wait([
       _database.choices(MasterType.plants),
       _database.choices(MasterType.departments),
+      _database.choices(MasterType.subDepartments),
       _database.choices(MasterType.lines),
       _database.choices(MasterType.sizes),
     ]);
-    if (mounted) setState(() { _plants=values[0]; _departments=values[1]; _lines=values[2]; _sizes=values[3]; _loading=false; });
+    if (mounted) setState(() { _plants=values[0]; _departments=values[1]; _subDepartments=values[2]; _lines=values[3]; _sizes=values[4]; _loading=false; });
   }
 
   @override
@@ -875,13 +1017,15 @@ class _FiltersPageState extends State<FiltersPage> {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  ChoiceField(label:'Plant',choices:_plants,selectedId:_filter.plantId,onSelected:(c)=>setState(()=>_filter=InventoryFilter(plantId:c.id,departmentId:_filter.departmentId,lineId:_filter.lineId,sizeId:_filter.sizeId))),
+                  ChoiceField(label:'Plant',choices:_plants,selectedId:_filter.plantId,onSelected:(c)=>setState(()=>_filter=InventoryFilter(plantId:c.id,departmentId:_filter.departmentId,subDepartmentId:_filter.subDepartmentId,lineId:_filter.lineId,sizeId:_filter.sizeId)),allowClear:true,onClear:()=>setState(()=>_filter=InventoryFilter(plantId:null,departmentId:_filter.departmentId,subDepartmentId:_filter.subDepartmentId,lineId:_filter.lineId,sizeId:_filter.sizeId))),
                   const SizedBox(height:12),
-                  ChoiceField(label:'Afdeling',choices:_departments,selectedId:_filter.departmentId,onSelected:(c)=>setState(()=>_filter=InventoryFilter(plantId:_filter.plantId,departmentId:c.id,lineId:_filter.lineId,sizeId:_filter.sizeId))),
+                  ChoiceField(label:'Afdeling',choices:_departments,selectedId:_filter.departmentId,onSelected:(c)=>setState(()=>_filter=InventoryFilter(plantId:_filter.plantId,departmentId:c.id,subDepartmentId:_filter.subDepartmentId,lineId:_filter.lineId,sizeId:_filter.sizeId)),allowClear:true,onClear:()=>setState(()=>_filter=InventoryFilter(plantId:_filter.plantId,departmentId:null,subDepartmentId:_filter.subDepartmentId,lineId:_filter.lineId,sizeId:_filter.sizeId))),
                   const SizedBox(height:12),
-                  ChoiceField(label:'Lijn',choices:_lines,selectedId:_filter.lineId,onSelected:(c)=>setState(()=>_filter=InventoryFilter(plantId:_filter.plantId,departmentId:_filter.departmentId,lineId:c.id,sizeId:_filter.sizeId))),
+                  ChoiceField(label:'Onderafdeling',choices:_subDepartments,selectedId:_filter.subDepartmentId,onSelected:(c)=>setState(()=>_filter=InventoryFilter(plantId:_filter.plantId,departmentId:_filter.departmentId,subDepartmentId:c.id,lineId:_filter.lineId,sizeId:_filter.sizeId)),allowClear:true,onClear:()=>setState(()=>_filter=InventoryFilter(plantId:_filter.plantId,departmentId:_filter.departmentId,subDepartmentId:null,lineId:_filter.lineId,sizeId:_filter.sizeId))),
                   const SizedBox(height:12),
-                  ChoiceField(label:'Maat',choices:_sizes,selectedId:_filter.sizeId,onSelected:(c)=>setState(()=>_filter=InventoryFilter(plantId:_filter.plantId,departmentId:_filter.departmentId,lineId:_filter.lineId,sizeId:c.id))),
+                  ChoiceField(label:'Lijn',choices:_lines,selectedId:_filter.lineId,onSelected:(c)=>setState(()=>_filter=InventoryFilter(plantId:_filter.plantId,departmentId:_filter.departmentId,subDepartmentId:_filter.subDepartmentId,lineId:c.id,sizeId:_filter.sizeId)),allowClear:true,onClear:()=>setState(()=>_filter=InventoryFilter(plantId:_filter.plantId,departmentId:_filter.departmentId,subDepartmentId:_filter.subDepartmentId,lineId:null,sizeId:_filter.sizeId))),
+                  const SizedBox(height:12),
+                  ChoiceField(label:'Maat',choices:_sizes,selectedId:_filter.sizeId,onSelected:(c)=>setState(()=>_filter=InventoryFilter(plantId:_filter.plantId,departmentId:_filter.departmentId,subDepartmentId:_filter.subDepartmentId,lineId:_filter.lineId,sizeId:c.id)),allowClear:true,onClear:()=>setState(()=>_filter=InventoryFilter(plantId:_filter.plantId,departmentId:_filter.departmentId,subDepartmentId:_filter.subDepartmentId,lineId:_filter.lineId,sizeId:null))),
                   const SizedBox(height:16),
                   FilledButton(onPressed:()=>Navigator.pop(context,_filter),child:const Text('Filters toepassen')),
                   TextButton(onPressed:()=>Navigator.pop(context,const InventoryFilter()),child:const Text('Filters wissen')),
@@ -942,7 +1086,11 @@ class _ManagementPageState extends State<ManagementPage> {
     final filtered=_items.where((item)=>item.name.toLowerCase().contains(_search.toLowerCase())).toList();
     return Scaffold(
       appBar:AppBar(title:const Text('Beheer')),
-      floatingActionButton:FloatingActionButton.extended(onPressed:()=>_editDialog(),icon:const Icon(Icons.add),label:const Text('Toevoegen')),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _editDialog(),
+        tooltip: 'Toevoegen',
+        child: const Icon(Icons.add),
+      ),
       body:Column(children:[
         SingleChildScrollView(scrollDirection:Axis.horizontal,padding:const EdgeInsets.symmetric(horizontal:8),child:Row(children:[for(final type in MasterType.values)Padding(padding:const EdgeInsets.symmetric(horizontal:3),child:ChoiceChip(label:Text(type.label,maxLines:1),selected:_type==type,onSelected:(_){setState((){_type=type;_loading=true;_search='';});_load();}))])),
         Padding(padding:const EdgeInsets.all(12),child:TextField(onChanged:(value)=>setState(()=>_search=value),decoration:const InputDecoration(prefixIcon:Icon(Icons.search),labelText:'Zoeken...'))),
