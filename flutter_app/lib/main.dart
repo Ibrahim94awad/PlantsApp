@@ -35,7 +35,7 @@ class PlantsApp extends StatelessWidget {
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
             foregroundColor: colorScheme.secondary,
-            side: BorderSide(color: colorScheme.secondary.withOpacity(0.9)),
+            side: BorderSide(color: colorScheme.secondary.withAlpha(230)),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
@@ -51,7 +51,7 @@ class PlantsApp extends StatelessWidget {
           foregroundColor: colorScheme.onSecondaryContainer,
         ),
         chipTheme: ChipThemeData(
-          backgroundColor: colorScheme.surfaceVariant,
+          backgroundColor: colorScheme.surfaceContainerHighest,
           selectedColor: colorScheme.primaryContainer,
           secondarySelectedColor: colorScheme.secondaryContainer,
           labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
