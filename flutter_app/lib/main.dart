@@ -775,6 +775,7 @@ class _StockPageState extends State<StockPage> {
         MasterType.subDepartments => _filter.subDepartmentId,
         MasterType.lines => _filter.lineId,
         MasterType.sizes => _filter.sizeId,
+        MasterType.blocks => null,
       };
 
   String _filterLabel(MasterType type) {
@@ -786,7 +787,8 @@ class _StockPageState extends State<StockPage> {
         MasterType.subDepartments => 'Onderafdeling',
         MasterType.lines => 'Lijn',
         MasterType.sizes => 'Maat',
-      };
+      MasterType.blocks => 'Blok',
+    };
     }
     for (final choice in _choices[type] ?? const <Choice>[]) {
       if (choice.id == id) {
