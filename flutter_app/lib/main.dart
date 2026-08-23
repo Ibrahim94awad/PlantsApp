@@ -282,19 +282,45 @@ class _InventoryPageState extends State<InventoryPage> {
   Future<void> _loadSubDepartments() async {
     final subDepartments = await _database.choices(MasterType.subDepartments);
     if (!mounted) return;
+    final wasNull = _filter.subDepartmentId == null;
     setState(() {
       _subDepartments = subDepartments;
       if (_filter.subDepartmentId != null && !subDepartments.any((entry) => entry.id == _filter.subDepartmentId)) {
         _filter = _filter.copyWith(subDepartmentId: null);
       }
+      if (_filter.subDepartmentId == null && subDepartments.isNotEmpty) {
+        _filter = _filter.copyWith(subDepartmentId: subDepartments.first.id);
+      }
     });
+    // If previously there was no subDepartment selected and now we set a default, reload to apply it
+    if (wasNull && _filter.subDepartmentId != null) {
+      await _reload();
+    }
+  }
+
+  List<InventoryRow> _numberRowsBySubDepartment(List<InventoryRow> rows) {
+    final grouped = <String, List<InventoryRow>>{};
+    for (final row in rows) {
+      grouped.putIfAbsent(row.subDepartment, () => []).add(row);
+    }
+    final sequence = <int, int>{};
+    for (final entry in grouped.entries) {
+      final values = List<InventoryRow>.from(entry.value)
+        ..sort((a, b) {
+          final created = a.createdAt.compareTo(b.createdAt);
+          return created != 0 ? created : a.id.compareTo(b.id);
+        });
+      for (var index = 0; index < values.length; index++) {
+        sequence[values[index].id] = index + 1;
+      }
+    }
+    return rows.map((row) => row.copyWith(sequenceNumber: sequence[row.id] ?? row.sequenceNumber ?? row.id)).toList();
   }
 
   Future<void> _reload() async {
     if (mounted) setState(() => _loading = true);
-    final rows = await _database.inventory(_searchController.text, _filter);
-    // also compute counts per subDepartment based on the same search but without subDepartment filter
-    final countsRows = await _database.inventory(_searchController.text, _filter.copyWith(subDepartmentId: null));
+    final rows = _numberRowsBySubDepartment(await _database.inventory(_searchController.text, _filter));
+    final countsRows = await _database.inventory('', const InventoryFilter());
     final Map<int,int> counts = {};
     final choices = _subDepartments.isEmpty ? await _database.choices(MasterType.subDepartments) : _subDepartments;
     for (final choice in choices) {
@@ -377,22 +403,13 @@ class _InventoryPageState extends State<InventoryPage> {
         title: Text(selectedSubDepartment == null ? 'Registraties' : 'Registraties • ${selectedSubDepartment.name}'),
         actions: [
           IconButton(
-            tooltip: 'Filters',
-            onPressed: _openFilters,
-            icon: Badge(
-              isLabelVisible: _filter.activeCount > 0,
-              label: Text('${_filter.activeCount}'),
-              child: const Icon(Icons.filter_list),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Beheer',
-            onPressed: () async {
-              await Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ManagementPage()));
-                            await _loadSubDepartments();
-                            await _reload();
-            },
-            icon: const Icon(Icons.settings),
+           tooltip: 'Beheer',
+           onPressed: () async {
+             await Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ManagementPage()));
+             await _loadSubDepartments();
+             await _reload();
+           },
+           icon: const Icon(Icons.settings),
           ),
         ],
       ),
@@ -404,12 +421,12 @@ class _InventoryPageState extends State<InventoryPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _searchChanged,
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Zoeken...'),
-            ),
+           padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+           child: TextField(
+             controller: _searchController,
+             onChanged: _searchChanged,
+             decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Zoeken...'),
+           ),
           ),
           if (_subDepartments.isNotEmpty)
            SizedBox(
@@ -430,25 +447,6 @@ class _InventoryPageState extends State<InventoryPage> {
                ],
              ),
            ),
-          if (_filter.activeCount > 0)
-            Container(
-              margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              padding: const EdgeInsets.only(left: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.secondaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.filter_list),
-                  Expanded(child: Text('  ${_filter.activeCount} filter${_filter.activeCount == 1 ? '' : 's'} actief')),
-                  TextButton(
-                    onPressed: () { setState(() => _filter = const InventoryFilter()); _reload(); },
-                    child: const Text('Wissen'),
-                  ),
-                ],
-              ),
-            ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -503,7 +501,7 @@ class _InventoryCard extends StatelessWidget {
             children: [
               Row(children: [
                 Expanded(child: Text(row.plant, style: const TextStyle(fontWeight: FontWeight.bold))),
-                Text('Nr. ${row.id}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)),
+                Text('Nr. ${row.sequenceNumber ?? row.id}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)),
               ]),
               const SizedBox(height: 4),
               Text('${row.department}  •  ${row.subDepartment}  •  ${row.line}  •  ${row.size}  •  ${formatQuantity(row.quantity)}'),
@@ -714,7 +712,20 @@ class _StockPageState extends State<StockPage> {
     for (final type in MasterType.values) {
       _choices[type] = await _database.choices(type);
     }
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final wasNull = _filter.subDepartmentId == null;
+    setState(() {
+      // If current subDepartmentId is no longer available, clear it.
+      if (_filter.subDepartmentId != null && !(_choices[MasterType.subDepartments] ?? []).any((entry) => entry.id == _filter.subDepartmentId)) {
+        _filter = _filter.copyWith(subDepartmentId: null);
+      }
+      // If there was no subDepartment selected and we have choices, pick the first as default.
+      if (_filter.subDepartmentId == null && (_choices[MasterType.subDepartments] ?? []).isNotEmpty) {
+        _filter = _filter.copyWith(subDepartmentId: (_choices[MasterType.subDepartments] ?? [])[0].id);
+      }
+    });
+    // If previously there was no subDepartment selected and now we set a default, reload to apply it.
+    if (wasNull && _filter.subDepartmentId != null) await reload();
   }
 
   Future<void> reload() async {
@@ -817,14 +828,42 @@ class _StockPageState extends State<StockPage> {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _searchChanged,
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Zoeken op plantnaam...'),
+          if ((_choices[MasterType.subDepartments] ?? const <Choice>[]).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              child: SizedBox(
+                height: 52,
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    for (final subDepartment in _choices[MasterType.subDepartments] ?? const <Choice>[])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          showCheckmark: false,
+                          label: Text(subDepartment.name),
+                          selected: _filter.subDepartmentId == subDepartment.id,
+                          onSelected: (_) => _applySubDepartmentFilter(subDepartment.id),
+                          selectedColor: Theme.of(context).colorScheme.primaryContainer,
+                          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          labelStyle: TextStyle(
+                            color: _filter.subDepartmentId == subDepartment.id
+                                ? Theme.of(context).colorScheme.onPrimaryContainer
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontWeight: _filter.subDepartmentId == subDepartment.id ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                          side: BorderSide(
+                            color: _filter.subDepartmentId == subDepartment.id
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
-          ),
           SizedBox(
             height: 46,
             child: ListView(
@@ -838,6 +877,13 @@ class _StockPageState extends State<StockPage> {
                       selected: _selectedId(type) != null,
                       label: Text(_filterLabel(type)),
                       onSelected: (_) => _chooseQuickFilter(type),
+                      selectedColor: const Color(0xFFDCFCE7),
+                      backgroundColor: const Color(0xFFE5E7EB),
+                      checkmarkColor: Theme.of(context).colorScheme.primary,
+                      labelStyle: TextStyle(
+                        color: _selectedId(type) != null ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface,
+                        fontWeight: _selectedId(type) != null ? FontWeight.w700 : FontWeight.w500,
+                      ),
                     ),
                   ),
               ],
