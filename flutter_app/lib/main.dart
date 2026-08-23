@@ -355,14 +355,6 @@ class _InventoryPageState extends State<InventoryPage> {
     if (changed == true) await _reload();
   }
 
-  Future<void> _openFilters() async {
-    final result = await Navigator.push<InventoryFilter>(context, MaterialPageRoute(builder: (_) => FiltersPage(initial: _filter)));
-    if (result != null) {
-      setState(() => _filter = result);
-      await _reload();
-    }
-  }
-
   Future<void> _copy(int id) async {
     await _openEditor(null, id);
   }
@@ -762,11 +754,6 @@ class _StockPageState extends State<StockPage> {
       _filter = _filter.copyWith(subDepartmentId: subDepartmentId);
     });
     await reload();
-  }
-
-  void _searchChanged(String value) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 250), reload);
   }
 
   int? _selectedId(MasterType type) => switch (type) {
