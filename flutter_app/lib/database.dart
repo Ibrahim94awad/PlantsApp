@@ -322,6 +322,12 @@ class AppDatabase {
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 4) {
+          await db.execute('''CREATE TABLE IF NOT EXISTS blocks(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            multiplier INTEGER NOT NULL,
+            createdAt INTEGER NOT NULL,
+            updatedAt INTEGER NOT NULL)''');
           await db.execute('''CREATE TABLE IF NOT EXISTS inventory_distributions(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             inventoryId INTEGER NOT NULL,
