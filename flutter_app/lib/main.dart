@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart' show DatabaseException;
 
 import 'database.dart';
@@ -11,54 +12,152 @@ Future<void> main() async {
   runApp(const PlantsApp());
 }
 
+// Botanical Inventory design tokens (from Stitch DESIGN.md).
+const Color kPrimary = Color(0xFF2D5A27);
+const Color kPrimaryDark = Color(0xFF154212);
+const Color kSurface = Color(0xFFFFF8F5);
+const Color kCardBorder = Color(0xFFE7E5E4);
+const Color kPanelTint = Color(0xFFF7EFEB);
+const Color kOnSurface = Color(0xFF1E1B19);
+const Color kOnSurfaceVariant = Color(0xFF42493E);
+const Color kStatusBg = Color(0xFFDCEFD6);
+const Color kStatusGreen = Color(0xFF22A146);
+const Color kDanger = Color(0xFFBA1A1A);
+const Color kBgGradientTop = Color(0xFFEAF3E6);
+const Color kBgGradientBottom = Color(0xFFD3E7CB);
+
 class PlantsApp extends StatelessWidget {
   const PlantsApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(seedColor: const Color(0xff397047));
+    final colorScheme = const ColorScheme.light().copyWith(
+      primary: kPrimary,
+      onPrimary: Colors.white,
+      primaryContainer: kStatusBg,
+      onPrimaryContainer: kPrimaryDark,
+      secondary: const Color(0xFF5E5E5E),
+      onSecondary: Colors.white,
+      surface: kSurface,
+      onSurface: kOnSurface,
+      onSurfaceVariant: kOnSurfaceVariant,
+      surfaceContainerHighest: const Color(0xFFE9E1DD),
+      outlineVariant: const Color(0xFFDDD8D3),
+      error: kDanger,
+      onError: Colors.white,
+    );
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Plantregistratie',
       theme: ThemeData(
         colorScheme: colorScheme,
         useMaterial3: true,
-        inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
+        fontFamily: 'Inter',
+        scaffoldBackgroundColor: Colors.transparent,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          foregroundColor: kPrimary,
+          centerTitle: true,
+          elevation: 0,
+          titleTextStyle: TextStyle(
+            fontFamily: 'Inter',
+            color: kPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.01,
+          ),
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: kCardBorder),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: kCardBorder),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: kCardBorder),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: kPrimary, width: 2),
+          ),
+        ),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.onPrimary,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            backgroundColor: kPrimary,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
-            foregroundColor: colorScheme.secondary,
-            side: BorderSide(color: colorScheme.secondary.withAlpha(230)),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            foregroundColor: kOnSurface,
+            side: const BorderSide(color: kCardBorder),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
-            foregroundColor: colorScheme.tertiary,
+            foregroundColor: kPrimary,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
         ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: const Color(0xE6FFFFFF),
+          indicatorColor: kStatusBg,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          labelTextStyle: WidgetStateProperty.resolveWith(
+            (states) => TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: states.contains(WidgetState.selected) ? kPrimary : kOnSurfaceVariant,
+            ),
+          ),
+          iconTheme: WidgetStateProperty.resolveWith(
+            (states) => IconThemeData(
+              color: states.contains(WidgetState.selected) ? kPrimary : kOnSurfaceVariant,
+            ),
+          ),
+        ),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: colorScheme.secondaryContainer,
-          foregroundColor: colorScheme.onSecondaryContainer,
+          backgroundColor: kPrimary,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
         chipTheme: ChipThemeData(
-          backgroundColor: colorScheme.surfaceContainerHighest,
-          selectedColor: colorScheme.primaryContainer,
-          secondarySelectedColor: colorScheme.secondaryContainer,
-          labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
-          secondaryLabelStyle: TextStyle(color: colorScheme.onPrimaryContainer),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          backgroundColor: const Color(0xFFF4ECE8),
+          selectedColor: kPrimary,
+          labelStyle: const TextStyle(color: kOnSurfaceVariant, fontWeight: FontWeight.w600),
+          secondaryLabelStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          side: const BorderSide(color: kCardBorder),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         ),
+      ),
+      builder: (context, child) => DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [kBgGradientTop, kBgGradientBottom],
+          ),
+        ),
+        child: child,
       ),
       home: const HomePage(),
     );
@@ -80,6 +179,7 @@ String historyAction(String action) => switch (action) {
       'removed' => 'Verwijderd',
       'corrected' => 'Gecorrigeerd',
       'edited' => 'Bewerkt',
+      'distributed' => 'Verdeeld',
       _ => action,
     };
 
@@ -120,7 +220,13 @@ Future<Choice?> showChoiceDialog(BuildContext context, String title, List<Choice
       builder: (context, setState) {
         final filtered = choices.where((item) => item.name.toLowerCase().contains(query.toLowerCase())).toList();
         return AlertDialog(
-          title: Text('Kies $title'),
+          titlePadding: const EdgeInsets.fromLTRB(24, 12, 12, 0),
+          title: Row(
+            children: [
+              Expanded(child: Text('Kies $title')),
+              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close), tooltip: 'Sluiten'),
+            ],
+          ),
           content: SizedBox(
             width: 520,
             height: 480,
@@ -147,7 +253,6 @@ Future<Choice?> showChoiceDialog(BuildContext context, String title, List<Choice
               ],
             ),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Sluiten'))],
         );
       },
     ),
@@ -178,28 +283,94 @@ class ChoiceField extends StatelessWidget {
     for (final item in choices) {
       if (item.id == selectedId) { selected = item; break; }
     }
-    return InkWell(
-      borderRadius: BorderRadius.circular(4),
-      onTap: () async {
-        final result = await showChoiceDialog(context, label, choices);
-        if (result != null) onSelected(result);
-      },
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          suffixIcon: allowClear && selected != null
-              ? IconButton(
-                  onPressed: onClear,
-                  tooltip: 'Wis selectie',
-                  splashRadius: 18,
-                  icon: const Icon(Icons.close),
-                )
-              : const Icon(Icons.arrow_drop_down),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: kOnSurfaceVariant, fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 6),
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () async {
+            final result = await showChoiceDialog(context, label, choices);
+            if (result != null) onSelected(result);
+          },
+          child: InputDecorator(
+            decoration: InputDecoration(
+              suffixIcon: allowClear && selected != null
+                  ? IconButton(
+                      onPressed: onClear,
+                      tooltip: 'Wis selectie',
+                      splashRadius: 18,
+                      icon: const Icon(Icons.close),
+                    )
+                  : const Icon(Icons.keyboard_arrow_down),
+            ),
+            child: Text(
+              selected?.name ?? 'Selecteer ${label.toLowerCase()}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: selected == null ? kOnSurfaceVariant : kOnSurface),
+            ),
+          ),
         ),
-        child: Text(selected?.name ?? 'Selecteer $label', maxLines: 1, overflow: TextOverflow.ellipsis),
-      ),
+      ],
     );
   }
+}
+
+class _StepperField extends StatelessWidget {
+  const _StepperField({required this.label, required this.controller, required this.onChanged, this.min = 0});
+  final String label;
+  final TextEditingController controller;
+  final VoidCallback onChanged;
+  final int min;
+
+  void _bump(int delta) {
+    final current = int.tryParse(controller.text) ?? min;
+    final next = current + delta;
+    if (next < min) return;
+    controller.text = next.toString();
+    onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: kOnSurfaceVariant, fontSize: 14, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 6),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: kCardBorder),
+            ),
+            child: Row(
+              children: [
+                IconButton(onPressed: () => _bump(-1), icon: const Icon(Icons.remove), color: kOnSurfaceVariant, tooltip: 'Minder'),
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onChanged: (_) => onChanged(),
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: kOnSurface),
+                    decoration: const InputDecoration(
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+                IconButton(onPressed: () => _bump(1), icon: const Icon(Icons.add), color: kPrimary, tooltip: 'Meer'),
+              ],
+            ),
+          ),
+        ],
+      );
 }
 
 class HomePage extends StatefulWidget {
@@ -210,6 +381,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final _inventoryKey = GlobalKey<_InventoryPageState>();
   final _stockKey = GlobalKey<_StockPageState>();
   int _index = 0;
 
@@ -218,17 +390,22 @@ class _HomePageState extends State<HomePage> {
         body: IndexedStack(
           index: _index,
           children: [
-            const InventoryPage(),
+            InventoryPage(key: _inventoryKey),
             StockPage(key: _stockKey),
+            const ManagementPage(),
           ],
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _index,
           onDestinationSelected: (value) {
             setState(() => _index = value);
-            if (value == 1) {
+            if (value == 0) {
               WidgetsBinding.instance.addPostFrameCallback(
-                (_) => _stockKey.currentState?.reload(),
+                (_) => _inventoryKey.currentState?.refresh(),
+              );
+            } else if (value == 1) {
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => _stockKey.currentState?.refresh(),
               );
             }
           },
@@ -242,6 +419,11 @@ class _HomePageState extends State<HomePage> {
               icon: Icon(Icons.inventory_2_outlined),
               selectedIcon: Icon(Icons.inventory_2),
               label: 'Voorraad',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.settings_outlined),
+              selectedIcon: Icon(Icons.settings),
+              label: 'Beheer',
             ),
           ],
         ),
@@ -262,6 +444,7 @@ class _InventoryPageState extends State<InventoryPage> {
   List<InventoryRow> _rows = const [];
   List<Choice> _subDepartments = const [];
   Map<int,int> _subCounts = {};
+  Map<int, List<DistributionRow>> _distributions = {};
   bool _loading = true;
   Timer? _debounce;
 
@@ -298,6 +481,11 @@ class _InventoryPageState extends State<InventoryPage> {
     }
   }
 
+  Future<void> refresh() async {
+    await _loadSubDepartments();
+    await _reload();
+  }
+
   List<InventoryRow> _numberRowsBySubDepartment(List<InventoryRow> rows) {
     final grouped = <String, List<InventoryRow>>{};
     for (final row in rows) {
@@ -320,13 +508,51 @@ class _InventoryPageState extends State<InventoryPage> {
   Future<void> _reload() async {
     if (mounted) setState(() => _loading = true);
     final rows = _numberRowsBySubDepartment(await _database.inventory(_searchController.text, _filter));
+    final distributions = await _database.distributionsForIds(rows.map((row) => row.id).toList());
     final countsRows = await _database.inventory('', const InventoryFilter());
     final Map<int,int> counts = {};
     final choices = _subDepartments.isEmpty ? await _database.choices(MasterType.subDepartments) : _subDepartments;
     for (final choice in choices) {
       counts[choice.id] = countsRows.where((r) => r.subDepartment == choice.name).length;
     }
-    if (mounted) setState(() { _rows = rows; _subCounts = counts; _loading = false; });
+    if (mounted) setState(() { _rows = rows; _distributions = distributions; _subCounts = counts; _loading = false; });
+  }
+
+  Future<void> _distribute(InventoryRow row) async {
+    final lines = await _database.choices(MasterType.lines);
+    final sizes = await _database.choices(MasterType.sizes);
+    if (!mounted) return;
+    final result = await showDialog<_DistributeResult>(
+      context: context,
+      builder: (_) => _DistributeDialog(row: row, lines: lines, sizes: sizes),
+    );
+    if (result == null) return;
+    try {
+      await _database.distribute(inventoryId: row.id, lineId: result.lineId, sizeId: result.sizeId, quantity: result.quantity);
+      await _reload();
+    } on StateError catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message.toString())));
+    }
+  }
+
+  Future<void> _editDistribution(InventoryRow row, DistributionRow distribution) async {
+    final lines = await _database.choices(MasterType.lines);
+    if (!mounted) return;
+    final result = await showDialog<_DistributionEditResult>(
+      context: context,
+      builder: (_) => _DistributionEditDialog(distribution: distribution, lines: lines, available: row.quantity),
+    );
+    if (result == null) return;
+    try {
+      if (result.delete) {
+        await _database.removeDistribution(distribution.id);
+      } else {
+        await _database.updateDistribution(distributionId: distribution.id, lineId: result.lineId, quantity: result.quantity);
+      }
+      await _reload();
+    } on StateError catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message.toString())));
+    }
   }
 
   void _searchChanged(String value) {
@@ -393,17 +619,6 @@ class _InventoryPageState extends State<InventoryPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(selectedSubDepartment == null ? 'Registraties' : 'Registraties • ${selectedSubDepartment.name}'),
-        actions: [
-          IconButton(
-           tooltip: 'Beheer',
-           onPressed: () async {
-             await Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const ManagementPage()));
-             await _loadSubDepartments();
-             await _reload();
-           },
-           icon: const Icon(Icons.settings),
-          ),
-        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openEditor(),
@@ -459,10 +674,13 @@ class _InventoryPageState extends State<InventoryPage> {
                               ),
                               for (final row in group.value) _InventoryCard(
                                 row: row,
+                                distributions: _distributions[row.id] ?? const [],
                                 onEdit: () => _openEditor(row.id),
                                 onCopy: () => _copy(row.id),
                                 onDelete: () => _delete(row.id),
                                 onHistory: () => Navigator.push<void>(context, MaterialPageRoute(builder: (_) => HistoryPage(row: row))),
+                                onDistribute: () => _distribute(row),
+                                onEditDistribution: (distribution) => _editDistribution(row, distribution),
                               ),
                             ],
                           ],
@@ -475,41 +693,389 @@ class _InventoryPageState extends State<InventoryPage> {
   }
 }
 
-class _InventoryCard extends StatelessWidget {
-  const _InventoryCard({required this.row, required this.onEdit, required this.onCopy, required this.onDelete, required this.onHistory});
+class _InventoryCard extends StatefulWidget {
+  const _InventoryCard({required this.row, required this.distributions, required this.onEdit, required this.onCopy, required this.onDelete, required this.onHistory, required this.onDistribute, required this.onEditDistribution});
   final InventoryRow row;
+  final List<DistributionRow> distributions;
   final VoidCallback onEdit;
   final VoidCallback onCopy;
   final VoidCallback onDelete;
   final VoidCallback onHistory;
+  final VoidCallback onDistribute;
+  final void Function(DistributionRow) onEditDistribution;
 
   @override
-  Widget build(BuildContext context) => Card(
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Expanded(child: Text(row.plant, style: const TextStyle(fontWeight: FontWeight.bold))),
-                Text('Nr. ${row.sequenceNumber ?? row.id}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)),
-              ]),
-              const SizedBox(height: 4),
-              Text('${row.department}  •  ${row.subDepartment}  •  ${row.line}  •  ${row.size}  •  ${formatQuantity(row.quantity)}'),
-              Text('Aangemaakt: ${formatDateTime(row.createdAt)}', style: Theme.of(context).textTheme.labelSmall),
-              Text('Laatst gewijzigd: ${formatDateTime(row.updatedAt)}', style: Theme.of(context).textTheme.labelSmall),
-              Wrap(
+  State<_InventoryCard> createState() => _InventoryCardState();
+}
+
+class _InventoryCardState extends State<_InventoryCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = widget.row;
+    final distributions = widget.distributions;
+    final total = row.quantity + distributions.fold<int>(0, (sum, d) => sum + d.quantity);
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              onTap: () => setState(() => _expanded = !_expanded),
+              borderRadius: BorderRadius.circular(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  IconButton(onPressed: onEdit, icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.primary), tooltip: 'Bewerken'),
-                  IconButton(onPressed: onCopy, icon: Icon(Icons.copy, color: Colors.teal), tooltip: 'Kopiëren'),
-                  IconButton(onPressed: onHistory, icon: Icon(Icons.history, color: Colors.grey), tooltip: 'Geschiedenis'),
-                  IconButton(onPressed: onDelete, icon: Icon(Icons.delete, color: Colors.red), tooltip: 'Verwijderen'),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          row.plant,
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: kOnSurface),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (distributions.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: kStatusBg, borderRadius: BorderRadius.circular(6)),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.call_split, size: 14, color: kPrimaryDark),
+                              SizedBox(width: 4),
+                              Text('Verdeeld', style: TextStyle(color: kPrimaryDark, fontWeight: FontWeight.w700, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: kStatusGreen,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Nr. ${row.sequenceNumber ?? row.id}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(_expanded ? Icons.expand_less : Icons.expand_more, color: kOnSurfaceVariant),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on_outlined, size: 16, color: kOnSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '${row.department} › ${row.subDepartment}',
+                          style: const TextStyle(color: kOnSurfaceVariant, fontSize: 14),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Maat: ${row.size}', style: const TextStyle(color: kOnSurfaceVariant, fontSize: 14)),
+                  if (!_expanded) ...[
+                    const SizedBox(height: 6),
+                    if (distributions.isEmpty)
+                      Row(
+                        children: [
+                          Expanded(child: Text('Lijn ${row.line}', style: const TextStyle(color: kOnSurface, fontWeight: FontWeight.w600, fontSize: 14))),
+                          Text('Aantal ${formatQuantity(row.quantity)}', style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w700, fontSize: 14)),
+                        ],
+                      )
+                    else
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text('Totaal: ${formatQuantity(total)}', style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w700, fontSize: 14)),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+            if (_expanded) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: kPanelTint,
+                  borderRadius: BorderRadius.circular(8),
+                  border: distributions.isNotEmpty ? const Border(left: BorderSide(color: kPrimary, width: 4)) : null,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (distributions.isNotEmpty) ...[
+                      const Text('Origineel', style: TextStyle(color: kPrimary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                      const SizedBox(height: 6),
+                    ],
+                    Row(
+                      children: [
+                        _CardMetric(label: 'Lijn', value: row.line),
+                        _CardMetric(label: 'Aantal', value: formatQuantity(row.quantity), highlight: true),
+                        const Spacer(),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (distributions.isNotEmpty) ...[
+                for (final distribution in distributions) ...[
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: () => widget.onEditDistribution(distribution),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: kPanelTint,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          _CardMetric(label: 'Lijn', value: distribution.line),
+                          _CardMetric(label: 'Aantal', value: formatQuantity(distribution.quantity), highlight: true),
+                          const Expanded(child: Align(alignment: Alignment.centerRight, child: Icon(Icons.edit_outlined, size: 18, color: kOnSurfaceVariant))),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'Totaal: ${formatQuantity(total)}',
+                    style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(onPressed: widget.onDistribute, icon: const Icon(Icons.call_split, color: kPrimary), tooltip: 'Verdelen'),
+                  IconButton(onPressed: widget.onEdit, icon: const Icon(Icons.edit_outlined, color: kOnSurfaceVariant), tooltip: 'Bewerken'),
+                  IconButton(onPressed: widget.onCopy, icon: const Icon(Icons.copy_outlined, color: kOnSurfaceVariant), tooltip: 'Kopiëren'),
+                  IconButton(onPressed: widget.onHistory, icon: const Icon(Icons.history, color: kOnSurfaceVariant), tooltip: 'Geschiedenis'),
+                  IconButton(onPressed: widget.onDelete, icon: const Icon(Icons.delete_outline, color: kDanger), tooltip: 'Verwijderen'),
                 ],
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CardMetric extends StatelessWidget {
+  const _CardMetric({required this.label, required this.value, this.highlight = false});
+  final String label;
+  final String value;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(color: kOnSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500)),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: TextStyle(
+                color: highlight ? kPrimary : kOnSurface,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      );
+}
+
+class _DistributeResult {
+  const _DistributeResult({required this.quantity, required this.lineId, required this.sizeId});
+  final int quantity;
+  final int lineId;
+  final int sizeId;
+}
+
+class _DistributeDialog extends StatefulWidget {
+  const _DistributeDialog({required this.row, required this.lines, required this.sizes});
+  final InventoryRow row;
+  final List<Choice> lines;
+  final List<Choice> sizes;
+
+  @override
+  State<_DistributeDialog> createState() => _DistributeDialogState();
+}
+
+class _DistributeDialogState extends State<_DistributeDialog> {
+  final _quantity = TextEditingController();
+  int? _lineId;
+  int? _sizeId;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    for (final size in widget.sizes) {
+      if (size.name == widget.row.size) { _sizeId = size.id; break; }
+    }
+  }
+
+  @override
+  void dispose() {
+    _quantity.dispose();
+    super.dispose();
+  }
+
+  void _confirm() {
+    final quantity = int.tryParse(_quantity.text);
+    if (quantity == null || quantity <= 0 || _lineId == null || _sizeId == null) {
+      setState(() => _error = 'Kies een lijn, maat en een geldig aantal.');
+      return;
+    }
+    if (quantity > widget.row.quantity) {
+      setState(() => _error = 'Er zijn maar ${formatQuantity(widget.row.quantity)} planten beschikbaar.');
+      return;
+    }
+    Navigator.pop(context, _DistributeResult(quantity: quantity, lineId: _lineId!, sizeId: _sizeId!));
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Verdelen'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Beschikbaar: ${formatQuantity(widget.row.quantity)}', style: const TextStyle(color: kOnSurfaceVariant)),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _quantity,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(labelText: 'Aantal'),
+              ),
+              const SizedBox(height: 12),
+              ChoiceField(label: 'Lijn', choices: widget.lines, selectedId: _lineId, onSelected: (choice) => setState(() => _lineId = choice.id)),
+              if (_error != null)
+                Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: kDanger))),
+            ],
           ),
         ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuleren')),
+          FilledButton(onPressed: _confirm, child: const Text('Verdelen')),
+        ],
+      );
+}
+
+class _DistributionEditResult {
+  const _DistributionEditResult({required this.quantity, required this.lineId, this.delete = false});
+  final int quantity;
+  final int lineId;
+  final bool delete;
+}
+
+class _DistributionEditDialog extends StatefulWidget {
+  const _DistributionEditDialog({required this.distribution, required this.lines, required this.available});
+  final DistributionRow distribution;
+  final List<Choice> lines;
+  final int available;
+
+  @override
+  State<_DistributionEditDialog> createState() => _DistributionEditDialogState();
+}
+
+class _DistributionEditDialogState extends State<_DistributionEditDialog> {
+  late final TextEditingController _quantity;
+  late int? _lineId;
+  String? _error;
+
+  int get _max => widget.available + widget.distribution.quantity;
+
+  @override
+  void initState() {
+    super.initState();
+    _quantity = TextEditingController(text: widget.distribution.quantity.toString());
+    _lineId = widget.distribution.lineId;
+  }
+
+  @override
+  void dispose() {
+    _quantity.dispose();
+    super.dispose();
+  }
+
+  void _confirm() {
+    final quantity = int.tryParse(_quantity.text);
+    if (quantity == null || quantity <= 0 || _lineId == null) {
+      setState(() => _error = 'Kies een lijn en een geldig aantal.');
+      return;
+    }
+    if (quantity > _max) {
+      setState(() => _error = 'Er zijn maar ${formatQuantity(_max)} planten beschikbaar.');
+      return;
+    }
+    Navigator.pop(context, _DistributionEditResult(quantity: quantity, lineId: _lineId!));
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Verdeling bewerken'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Maximaal: ${formatQuantity(_max)}', style: const TextStyle(color: kOnSurfaceVariant)),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _quantity,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(labelText: 'Aantal'),
+              ),
+              const SizedBox(height: 12),
+              ChoiceField(label: 'Lijn', choices: widget.lines, selectedId: _lineId, onSelected: (choice) => setState(() => _lineId = choice.id)),
+              if (_error != null)
+                Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: kDanger))),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, _DistributionEditResult(quantity: widget.distribution.quantity, lineId: widget.distribution.lineId, delete: true)),
+            style: TextButton.styleFrom(foregroundColor: kDanger),
+            child: const Text('Verwijderen'),
+          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuleren')),
+          FilledButton(onPressed: _confirm, child: const Text('Opslaan')),
+        ],
       );
 }
 
@@ -526,18 +1092,17 @@ class EditorPage extends StatefulWidget {
 class _EditorPageState extends State<EditorPage> {
   final _database = AppDatabase.instance;
   final _quantity = TextEditingController();
+  final _block = TextEditingController(text: '1');
   List<Choice> _plants = const [];
   List<Choice> _departments = const [];
   List<Choice> _subDepartments = const [];
   List<Choice> _lines = const [];
   List<Choice> _sizes = const [];
-  List<Choice> _blocks = const [];
   int? _plantId;
   int? _departmentId;
   int? _subDepartmentId;
   int? _lineId;
   int? _sizeId;
-  int? _blockId;
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -551,6 +1116,7 @@ class _EditorPageState extends State<EditorPage> {
   @override
   void dispose() {
     _quantity.dispose();
+    _block.dispose();
     super.dispose();
   }
 
@@ -561,7 +1127,6 @@ class _EditorPageState extends State<EditorPage> {
       _database.choices(MasterType.subDepartments),
       _database.choices(MasterType.lines),
       _database.choices(MasterType.sizes),
-      _database.choices(MasterType.blocks),
     ]);
     InventoryRecordData? record;
     final sourceId = widget.recordId ?? widget.copyFromId;
@@ -576,14 +1141,12 @@ class _EditorPageState extends State<EditorPage> {
       _subDepartments = values[2];
       _lines = values[3];
       _sizes = values[4];
-      _blocks = values[5];
       _plantId = record?.plantId;
       _departmentId = record?.departmentId;
       _subDepartmentId = record?.subDepartmentId ?? widget.initialSubDepartmentId;
       _lineId = record?.lineId;
       _sizeId = record?.sizeId;
-      // default block: prefer multiplier == 1 if available
-      _blockId = _blocks.firstWhere((c) => c.defaultQuantity == 1, orElse: () => _blocks.isNotEmpty ? _blocks.first : Choice(0, '1', defaultQuantity: 1)).id;
+      _block.text = '1';
       _quantity.text = widget.copyFromId != null
           ? copiedQuantity?.toString() ?? ''
           : record?.quantity.toString() ?? '';
@@ -593,13 +1156,11 @@ class _EditorPageState extends State<EditorPage> {
 
   Future<void> _save() async {
     final quantity = int.tryParse(_quantity.text);
-    if (_plantId == null || _departmentId == null || _subDepartmentId == null || _lineId == null || _sizeId == null || quantity == null || quantity <= 0) {
+    final multiplier = int.tryParse(_block.text);
+    if (_plantId == null || _departmentId == null || _subDepartmentId == null || _lineId == null || _sizeId == null || quantity == null || quantity <= 0 || multiplier == null || multiplier <= 0) {
       setState(() => _error = 'Vul alle velden in en gebruik een geldig aantal groter dan nul.');
       return;
     }
-    // apply block multiplier if selected
-    final blockChoice = _blocks.firstWhere((c) => c.id == _blockId, orElse: () => Choice(0, '1', defaultQuantity: 1));
-    final multiplier = blockChoice.defaultQuantity ?? 1;
     final saveQuantity = quantity * multiplier;
     if (widget.recordId == null) {
       final existing = await _database.matchingRecord(
@@ -616,8 +1177,8 @@ class _EditorPageState extends State<EditorPage> {
             title: const Text('Bestaande registratie gevonden'),
             content: Text(
               'Huidig aantal: ${formatQuantity(existing.quantity)}\n'
-              'Toevoegen: ${formatQuantity(quantity)}\n'
-              'Nieuw totaal: ${formatQuantity(existing.quantity + quantity)}',
+              'Toevoegen: ${formatQuantity(saveQuantity)}\n'
+              'Nieuw totaal: ${formatQuantity(existing.quantity + saveQuantity)}',
             ),
             actions: [
                           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuleren')),
@@ -655,30 +1216,91 @@ class _EditorPageState extends State<EditorPage> {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  ChoiceField(label: 'Plant', choices: _plants, selectedId: _plantId, onSelected: (choice) => setState(() => _plantId = choice.id)),
-                  const SizedBox(height: 12),
-                  ChoiceField(label: 'Afdeling', choices: _departments, selectedId: _departmentId, onSelected: (choice) => setState(() { _departmentId = choice.id; _lineId = null; })),
-                  const SizedBox(height: 12),
-                  ChoiceField(label: 'Onderafdeling', choices: _subDepartments, selectedId: _subDepartmentId, onSelected: (choice) => setState(() => _subDepartmentId = choice.id)),
-                  const SizedBox(height: 12),
-                  ChoiceField(label: 'Block', choices: _blocks, selectedId: _blockId, onSelected: (choice) => setState(() => _blockId = choice.id)),
-                  const SizedBox(height: 12),
-                  ChoiceField(label: 'Lijn', choices: _lines, selectedId: _lineId, onSelected: (choice) => setState(() => _lineId = choice.id)),
-
-                  const SizedBox(height: 12),
-                  ChoiceField(label: 'Maat', choices: _sizes, selectedId: _sizeId, onSelected: (choice) => setState(() { _sizeId = choice.id; _quantity.text = choice.defaultQuantity?.toString() ?? ''; })),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _quantity,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Aantal'),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ChoiceField(label: 'Plant', choices: _plants, selectedId: _plantId, onSelected: (choice) => setState(() => _plantId = choice.id)),
+                          const SizedBox(height: 16),
+                          ChoiceField(label: 'Afdeling', choices: _departments, selectedId: _departmentId, onSelected: (choice) => setState(() { _departmentId = choice.id; _lineId = null; })),
+                          const SizedBox(height: 16),
+                          ChoiceField(label: 'Onderafdeling', choices: _subDepartments, selectedId: _subDepartmentId, onSelected: (choice) => setState(() => _subDepartmentId = choice.id)),
+                          const SizedBox(height: 16),
+                          ChoiceField(label: 'Lijn', choices: _lines, selectedId: _lineId, onSelected: (choice) => setState(() => _lineId = choice.id)),
+                          const SizedBox(height: 16),
+                          _StepperField(
+                            label: 'Blok',
+                            controller: _block,
+                            min: 1,
+                            onChanged: () => setState(() {}),
+                          ),
+                          const SizedBox(height: 16),
+                          ChoiceField(label: 'Maat', choices: _sizes, selectedId: _sizeId, onSelected: (choice) => setState(() { _sizeId = choice.id; _quantity.text = choice.defaultQuantity?.toString() ?? ''; })),
+                          const SizedBox(height: 16),
+                          _StepperField(
+                            label: 'Aantal',
+                            controller: _quantity,
+                            onChanged: () => setState(() {}),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                  if (_totalPreview != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                      decoration: BoxDecoration(
+                        color: kPanelTint,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Verwachte totaal:', style: TextStyle(color: kOnSurfaceVariant, fontSize: 16)),
+                          Text(
+                            formatQuantity(_totalPreview!),
+                            style: const TextStyle(color: kPrimary, fontWeight: FontWeight.w700, fontSize: 22),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFDAD6),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: kDanger, width: 2),
+                      ),
+                      child: Text(_error!, style: const TextStyle(color: Color(0xFF93000A), fontWeight: FontWeight.w500)),
+                    ),
+                  ],
                   const SizedBox(height: 16),
-                  FilledButton(onPressed: _saving ? null : _save, child: Text(_saving ? 'Opslaan...' : 'Opslaan')),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _saving ? null : _save,
+                      icon: const Icon(Icons.save_outlined),
+                      label: Text(_saving ? 'Opslaan...' : 'Opslaan'),
+                    ),
+                  ),
                 ],
               ),
       );
+
+  int? get _totalPreview {
+    final quantity = int.tryParse(_quantity.text);
+    final multiplier = int.tryParse(_block.text);
+    if (quantity == null || quantity <= 0 || multiplier == null || multiplier <= 0) return null;
+    return quantity * multiplier;
+  }
 }
 
 class StockPage extends StatefulWidget {
@@ -733,12 +1355,27 @@ class _StockPageState extends State<StockPage> {
     if (wasNull && _filter.subDepartmentId != null) await reload();
   }
 
+  Future<void> refresh() async {
+    final subDepartments = await _database.choices(MasterType.subDepartments);
+    if (!mounted) return;
+    setState(() {
+      _choices[MasterType.subDepartments] = subDepartments;
+      if (_filter.subDepartmentId != null && !subDepartments.any((entry) => entry.id == _filter.subDepartmentId)) {
+        _filter = _filter.copyWith(subDepartmentId: null);
+      }
+      if (_filter.subDepartmentId == null && subDepartments.isNotEmpty) {
+        _filter = _filter.copyWith(subDepartmentId: subDepartments.first.id);
+      }
+    });
+    await reload();
+  }
+
   Future<void> reload() async {
     if (mounted) setState(() => _loading = true);
     final results = await Future.wait<Object>([
       _database.inventoryTotal(_searchController.text, _filter),
       _database.inventoryPlantTotals(_searchController.text, _filter),
-      _database.inventory(_searchController.text, _filter),
+      _database.inventory(_searchController.text, _filter, includeDistributions: true),
     ]);
     if (!mounted) return;
     setState(() {
@@ -872,7 +1509,7 @@ class _StockPageState extends State<StockPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               scrollDirection: Axis.horizontal,
               children: [
-                for (final type in MasterType.values.where((t) => t != MasterType.subDepartments))
+                for (final type in MasterType.values.where((t) => t != MasterType.subDepartments && t != MasterType.blocks))
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: FilterChip(
@@ -1146,7 +1783,7 @@ class _ManagementPageState extends State<ManagementPage> {
         child: const Icon(Icons.add),
       ),
       body:Column(children:[
-        SingleChildScrollView(scrollDirection:Axis.horizontal,padding:const EdgeInsets.symmetric(horizontal:8),child:Row(children:[for(final type in MasterType.values)Padding(padding:const EdgeInsets.symmetric(horizontal:3),child:ChoiceChip(label:Text(type.label,maxLines:1),selected:_type==type,onSelected:(_){setState((){_type=type;_loading=true;_search='';});_load();}))])),
+        SizedBox(width:double.infinity,child:Padding(padding:const EdgeInsets.fromLTRB(8,4,8,0),child:FittedBox(fit:BoxFit.scaleDown,alignment:Alignment.centerLeft,child:Row(mainAxisSize:MainAxisSize.min,children:[for(final type in MasterType.values.where((type) => type != MasterType.blocks))Padding(padding:const EdgeInsets.symmetric(horizontal:3),child:ChoiceChip(label:Text(type.label),selected:_type==type,onSelected:(_){setState((){_type=type;_loading=true;_search='';});_load();}))])))),
         Padding(padding:const EdgeInsets.all(12),child:TextField(onChanged:(value)=>setState(()=>_search=value),decoration:const InputDecoration(prefixIcon:Icon(Icons.search),labelText:'Zoeken...'))),
         Expanded(child:_loading?const Center(child:CircularProgressIndicator()):filtered.isEmpty?const Center(child:Text('Geen items gevonden.')):ListView.separated(padding:const EdgeInsets.only(bottom:88),itemCount:filtered.length,separatorBuilder:(_,__)=>const Divider(height:1),itemBuilder:(context,index){final item=filtered[index];return ListTile(
           title: Text(item.name),
