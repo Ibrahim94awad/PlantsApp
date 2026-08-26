@@ -50,12 +50,14 @@ class _HistoryPageState extends State<HistoryPage> {
               child: FutureBuilder<List<InventoryHistoryEntry>>(
                 future: _history,
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState != ConnectionState.done)
+                  if (snapshot.connectionState != ConnectionState.done) {
                     return const Center(child: CircularProgressIndicator());
+                  }
                   final entries = snapshot.data ?? const [];
-                  if (entries.isEmpty)
+                  if (entries.isEmpty) {
                     return const Center(
                         child: Text('Nog geen geschiedenis beschikbaar.'));
+                  }
                   return ListView.separated(
                     itemCount: entries.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),

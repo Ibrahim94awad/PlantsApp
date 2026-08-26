@@ -298,7 +298,9 @@ class _EditorPageState extends State<EditorPage> {
     if (quantity == null ||
         quantity <= 0 ||
         multiplier == null ||
-        multiplier <= 0) return null;
+        multiplier <= 0) {
+      return null;
+    }
     return quantity * multiplier;
   }
 }

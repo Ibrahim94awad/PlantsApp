@@ -85,9 +85,10 @@ class _ManagementPageState extends State<ManagementPage> {
       await _database.deleteMaster(_type, item.id);
       await _load();
     } on DomainException catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
+      }
     }
   }
 

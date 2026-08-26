@@ -56,11 +56,16 @@ class AppDatabase extends ChangeNotifier {
   }
 
   Future<void> _importLegacyDatabase() async {
-    if (!canImportLegacyDatabase) return;
-    if (await _count('plants') > 0 || await _count('inventory_records') > 0)
+    if (!canImportLegacyDatabase) {
       return;
+    }
+    if (await _count('plants') > 0 || await _count('inventory_records') > 0) {
+      return;
+    }
     final legacyPath = await applicationDatabasePath('plantregistratie.db');
-    if (!await databaseExists(legacyPath)) return;
+    if (!await databaseExists(legacyPath)) {
+      return;
+    }
     Database? legacy;
     try {
       legacy = await openDatabase(legacyPath, readOnly: true);
@@ -306,8 +311,9 @@ class AppDatabase extends ChangeNotifier {
       required int lineId,
       required int sizeId,
       required int quantity}) async {
-    if (quantity <= 0)
+    if (quantity <= 0) {
       throw const DomainException('Geef een aantal groter dan nul op.');
+    }
     final stamp = _now();
     await database.transaction((transaction) async {
       final rows = await transaction.query('inventory_records',
@@ -315,12 +321,14 @@ class AppDatabase extends ChangeNotifier {
           where: 'id = ? AND isActive = 1',
           whereArgs: [inventoryId],
           limit: 1);
-      if (rows.isEmpty)
+      if (rows.isEmpty) {
         throw const DomainException('Registratie niet gevonden.');
+      }
       final available = rows.first['quantity'] as int;
-      if (quantity > available)
+      if (quantity > available) {
         throw DomainException(
             'Er zijn maar $available planten beschikbaar om te verdelen.');
+      }
       await transaction.update(
           'inventory_records',
           {
@@ -395,8 +403,9 @@ class AppDatabase extends ChangeNotifier {
       {required int distributionId,
       required int lineId,
       required int quantity}) async {
-    if (quantity <= 0)
+    if (quantity <= 0) {
       throw const DomainException('Geef een aantal groter dan nul op.');
+    }
     final stamp = _now();
     await database.transaction((transaction) async {
       final distRows = await transaction.query('inventory_distributions',
@@ -404,8 +413,9 @@ class AppDatabase extends ChangeNotifier {
           where: 'id = ?',
           whereArgs: [distributionId],
           limit: 1);
-      if (distRows.isEmpty)
+      if (distRows.isEmpty) {
         throw const DomainException('Verdeling niet gevonden.');
+      }
       final inventoryId = distRows.first['inventoryId'] as int;
       final oldQuantity = distRows.first['quantity'] as int;
       final parentRows = await transaction.query('inventory_records',
@@ -413,13 +423,15 @@ class AppDatabase extends ChangeNotifier {
           where: 'id = ? AND isActive = 1',
           whereArgs: [inventoryId],
           limit: 1);
-      if (parentRows.isEmpty)
+      if (parentRows.isEmpty) {
         throw const DomainException('Registratie niet gevonden.');
+      }
       final available = parentRows.first['quantity'] as int;
       final delta = quantity - oldQuantity;
-      if (delta > available)
+      if (delta > available) {
         throw DomainException(
             'Er zijn maar ${available + oldQuantity} planten beschikbaar om te verdelen.');
+      }
       await transaction.update(
           'inventory_records',
           {
@@ -601,8 +613,9 @@ class AppDatabase extends ChangeNotifier {
       }
       final sourceRows = await transaction.query('inventory_records',
           where: 'id = ? AND isActive = 1', whereArgs: [id], limit: 1);
-      if (sourceRows.isEmpty)
+      if (sourceRows.isEmpty) {
         throw const DomainException('Registratie niet gevonden.');
+      }
       final source = sourceRows.first;
       final previous = source['quantity'] as int;
       final positionChanged = source['plantId'] != plantId ||
@@ -791,9 +804,10 @@ class AppDatabase extends ChangeNotifier {
     final args = type == MasterType.departments ? [id, id] : [id];
     final used =
         Sqflite.firstIntValue(await database.rawQuery(usageSql, args)) ?? 0;
-    if (used > 0)
+    if (used > 0) {
       throw const DomainException(
           'Dit item wordt gebruikt in bestaande registraties en kan niet worden verwijderd.');
+    }
     await database.delete(type.table, where: 'id = ?', whereArgs: [id]);
     notifyListeners();
   }

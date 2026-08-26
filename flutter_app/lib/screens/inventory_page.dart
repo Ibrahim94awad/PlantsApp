@@ -125,9 +125,10 @@ class _InventoryPageState extends State<InventoryPage> {
           sizeId: result.sizeId,
           quantity: result.quantity);
     } on DomainException catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
+      }
     }
   }
 
@@ -151,9 +152,10 @@ class _InventoryPageState extends State<InventoryPage> {
             quantity: result.quantity);
       }
     } on DomainException catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
+      }
     }
   }
 
