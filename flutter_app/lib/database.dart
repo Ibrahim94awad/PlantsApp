@@ -1,229 +1,22 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
+
+import 'data/schema.dart';
+import 'domain_exception.dart';
+import 'models.dart';
 
 import 'database_platform.dart'
     if (dart.library.js_interop) 'database_platform_web.dart';
 
+export 'domain_exception.dart';
+export 'models.dart';
+
 int _now() => DateTime.now().millisecondsSinceEpoch;
 
-class Choice {
-  const Choice(this.id, this.name, {this.defaultQuantity});
-  final int id;
-  final String name;
-  final int? defaultQuantity;
-}
-
-class InventoryRow {
-  const InventoryRow({
-    required this.id,
-    required this.plant,
-    required this.department,
-    required this.subDepartment,
-    required this.line,
-    required this.size,
-    required this.quantity,
-    required this.createdAt,
-    required this.updatedAt,
-    this.sequenceNumber,
-  });
-
-  factory InventoryRow.fromMap(Map<String, Object?> map) => InventoryRow(
-        id: map['id'] as int,
-        plant: map['plant'] as String,
-        department: map['department'] as String,
-        subDepartment: map['subDepartment'] as String,
-        line: map['line'] as String,
-        size: map['size'] as String,
-        quantity: map['quantity'] as int,
-        createdAt: map['createdAt'] as int,
-        updatedAt: map['updatedAt'] as int,
-        sequenceNumber: map['sequenceNumber'] as int?,
-      );
-
-  InventoryRow copyWith({int? sequenceNumber}) => InventoryRow(
-        id: id,
-        plant: plant,
-        department: department,
-        subDepartment: subDepartment,
-        line: line,
-        size: size,
-        quantity: quantity,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-        sequenceNumber: sequenceNumber ?? this.sequenceNumber,
-      );
-
-  final int id;
-  final String plant;
-  final String department;
-  final String subDepartment;
-  final String line;
-  final String size;
-  final int quantity;
-  final int createdAt;
-  final int updatedAt;
-  final int? sequenceNumber;
-}
-
-class InventoryRecordData {
-  const InventoryRecordData({
-    required this.id,
-    required this.plantId,
-    required this.departmentId,
-    required this.subDepartmentId,
-    required this.lineId,
-    required this.sizeId,
-    required this.quantity,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-
-  factory InventoryRecordData.fromMap(Map<String, Object?> map) => InventoryRecordData(
-        id: map['id'] as int,
-        plantId: map['plantId'] as int,
-        departmentId: map['departmentId'] as int,
-        subDepartmentId: map['subDepartmentId'] as int,
-        lineId: map['lineId'] as int,
-        sizeId: map['sizeId'] as int,
-        quantity: map['quantity'] as int,
-        createdAt: map['createdAt'] as int,
-        updatedAt: map['updatedAt'] as int,
-      );
-
-  final int id;
-  final int plantId;
-  final int departmentId;
-  final int subDepartmentId;
-  final int lineId;
-  final int sizeId;
-  final int quantity;
-  final int createdAt;
-  final int updatedAt;
-}
-
-class SaveResult {
-  const SaveResult({
-    required this.id,
-    required this.previousQuantity,
-    required this.changeAmount,
-    required this.newQuantity,
-    required this.merged,
-  });
-
-  final int id;
-  final int previousQuantity;
-  final int changeAmount;
-  final int newQuantity;
-  final bool merged;
-}
-
-class InventoryHistoryEntry {
-  const InventoryHistoryEntry({
-    required this.id,
-    required this.changeAmount,
-    required this.action,
-    required this.createdAt,
-  });
-
-  factory InventoryHistoryEntry.fromMap(Map<String, Object?> map) =>
-      InventoryHistoryEntry(
-        id: map['id'] as int,
-        changeAmount: map['changeAmount'] as int,
-        action: map['action'] as String,
-        createdAt: map['createdAt'] as int,
-      );
-
-  final int id;
-  final int changeAmount;
-  final String action;
-  final int createdAt;
-}
-
-class PlantInventoryTotal {
-  const PlantInventoryTotal({
-    required this.plantId,
-    required this.plant,
-    required this.quantity,
-  });
-
-  final int plantId;
-  final String plant;
-  final int quantity;
-}
-
-class DistributionRow {
-  const DistributionRow({
-    required this.id,
-    required this.inventoryId,
-    required this.lineId,
-    required this.sizeId,
-    required this.line,
-    required this.size,
-    required this.quantity,
-  });
-
-  factory DistributionRow.fromMap(Map<String, Object?> map) => DistributionRow(
-        id: map['id'] as int,
-        inventoryId: map['inventoryId'] as int,
-        lineId: map['lineId'] as int,
-        sizeId: map['sizeId'] as int,
-        line: map['line'] as String,
-        size: map['size'] as String,
-        quantity: map['quantity'] as int,
-      );
-
-  final int id;
-  final int inventoryId;
-  final int lineId;
-  final int sizeId;
-  final String line;
-  final String size;
-  final int quantity;
-}
-
-class InventoryFilter {
-  const InventoryFilter({this.plantId, this.departmentId, this.subDepartmentId, this.lineId, this.sizeId});
-
-  final int? plantId;
-  final int? departmentId;
-  final int? subDepartmentId;
-  final int? lineId;
-  final int? sizeId;
-
-  int get activeCount => [plantId, departmentId, subDepartmentId, lineId, sizeId].where((id) => id != null).length;
-
-  InventoryFilter copyWith({int? plantId, int? departmentId, int? subDepartmentId, int? lineId, int? sizeId}) => InventoryFilter(
-        plantId: plantId ?? this.plantId,
-        departmentId: departmentId ?? this.departmentId,
-        subDepartmentId: subDepartmentId ?? this.subDepartmentId,
-        lineId: lineId ?? this.lineId,
-        sizeId: sizeId ?? this.sizeId,
-      );
-}
-
-enum MasterType { plants, departments, subDepartments, lines, sizes, blocks }
-
-extension MasterTypeText on MasterType {
-  String get label => switch (this) {
-        MasterType.plants => 'Planten',
-        MasterType.departments => 'Afdelingen',
-        MasterType.subDepartments => 'Onderafdelingen',
-        MasterType.lines => 'Lijnen',
-        MasterType.sizes => 'Maten',
-       MasterType.blocks => 'Blokken',
-     };
- 
-  String get table => switch (this) {
-        MasterType.plants => 'plants',
-        MasterType.departments => 'departments',
-        MasterType.subDepartments => 'subdepartments',
-        MasterType.lines => 'lines',
-        MasterType.sizes => 'sizes',
-        MasterType.blocks => 'blocks',
-      };
-}
-
-class AppDatabase {
+/// Single access point to the local SQLite database. Notifies listeners after
+/// any mutation so open screens can refresh without reaching into each other.
+class AppDatabase extends ChangeNotifier {
   AppDatabase._();
   static final AppDatabase instance = AppDatabase._();
   Database? _database;
@@ -234,187 +27,17 @@ class AppDatabase {
     return value;
   }
 
-  Future<void> init() async {
+  Future<void> init({String databaseName = 'plantregistratie_flutter.db'}) async {
     if (_database != null) return;
     await configureDatabasePlatform();
-    final path = await applicationDatabasePath('plantregistratie_flutter.db');
+    final path = await applicationDatabasePath(databaseName);
     _database = await openDatabase(
       path,
       version: 4,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
-      onCreate: (db, version) async {
-        await db.execute('''CREATE TABLE plants(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL UNIQUE,
-          createdAt INTEGER NOT NULL,
-          updatedAt INTEGER NOT NULL)''');
-        await db.execute('''CREATE TABLE departments(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL UNIQUE,
-          createdAt INTEGER NOT NULL,
-          updatedAt INTEGER NOT NULL)''');
-        await db.execute('''CREATE TABLE subdepartments(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL UNIQUE,
-          createdAt INTEGER NOT NULL,
-          updatedAt INTEGER NOT NULL)''');
-        await db.execute('''CREATE TABLE lines(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          departmentId INTEGER,
-          createdAt INTEGER NOT NULL,
-          updatedAt INTEGER NOT NULL,
-          FOREIGN KEY(departmentId) REFERENCES departments(id) ON DELETE RESTRICT)''');
-        await db.execute('''CREATE TABLE sizes(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL UNIQUE,
-          defaultQuantity INTEGER NOT NULL,
-          createdAt INTEGER NOT NULL,
-          updatedAt INTEGER NOT NULL)''');
-        await db.execute('''CREATE TABLE blocks(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL UNIQUE,
-          multiplier INTEGER NOT NULL,
-          createdAt INTEGER NOT NULL,
-          updatedAt INTEGER NOT NULL)''');
-        await db.execute('''CREATE TABLE inventory_records(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          plantId INTEGER NOT NULL,
-          departmentId INTEGER NOT NULL,
-          subDepartmentId INTEGER NOT NULL,
-          lineId INTEGER NOT NULL,
-          sizeId INTEGER NOT NULL,
-          quantity INTEGER NOT NULL CHECK(quantity >= 0),
-          isActive INTEGER NOT NULL DEFAULT 1,
-          createdAt INTEGER NOT NULL,
-          updatedAt INTEGER NOT NULL,
-          FOREIGN KEY(plantId) REFERENCES plants(id) ON DELETE RESTRICT,
-          FOREIGN KEY(departmentId) REFERENCES departments(id) ON DELETE RESTRICT,
-          FOREIGN KEY(subDepartmentId) REFERENCES subdepartments(id) ON DELETE RESTRICT,
-          FOREIGN KEY(lineId) REFERENCES lines(id) ON DELETE RESTRICT,
-          FOREIGN KEY(sizeId) REFERENCES sizes(id) ON DELETE RESTRICT)''');
-        await db.execute('''CREATE TABLE inventory_history(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          inventoryId INTEGER NOT NULL,
-          changeAmount INTEGER NOT NULL,
-          action TEXT NOT NULL,
-          createdAt INTEGER NOT NULL,
-          FOREIGN KEY(inventoryId) REFERENCES inventory_records(id) ON DELETE RESTRICT)''');
-        await db.execute('''CREATE TABLE inventory_distributions(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          inventoryId INTEGER NOT NULL,
-          lineId INTEGER NOT NULL,
-          sizeId INTEGER NOT NULL,
-          quantity INTEGER NOT NULL CHECK(quantity > 0),
-          createdAt INTEGER NOT NULL,
-          updatedAt INTEGER NOT NULL,
-          FOREIGN KEY(inventoryId) REFERENCES inventory_records(id) ON DELETE CASCADE,
-          FOREIGN KEY(lineId) REFERENCES lines(id) ON DELETE RESTRICT,
-          FOREIGN KEY(sizeId) REFERENCES sizes(id) ON DELETE RESTRICT)''');
-        for (final column in ['plantId', 'departmentId', 'subDepartmentId', 'lineId', 'sizeId']) {
-          await db.execute('CREATE INDEX index_inventory_$column ON inventory_records($column)');
-        }
-        await db.execute('CREATE UNIQUE INDEX index_inventory_position ON inventory_records(plantId, departmentId, subDepartmentId, lineId, sizeId)');
-        await db.execute('CREATE INDEX index_inventory_active ON inventory_records(isActive)');
-        await db.execute('CREATE INDEX index_history_inventory_date ON inventory_history(inventoryId, createdAt DESC)');
-        await db.execute('CREATE INDEX index_distribution_inventory ON inventory_distributions(inventoryId)');
-        await db.execute('CREATE INDEX index_plants_name ON plants(name COLLATE NOCASE)');
-      },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 4) {
-          await db.execute('''CREATE TABLE IF NOT EXISTS blocks(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            multiplier INTEGER NOT NULL,
-            createdAt INTEGER NOT NULL,
-            updatedAt INTEGER NOT NULL)''');
-          await db.execute('''CREATE TABLE IF NOT EXISTS inventory_distributions(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            inventoryId INTEGER NOT NULL,
-            lineId INTEGER NOT NULL,
-            sizeId INTEGER NOT NULL,
-            quantity INTEGER NOT NULL CHECK(quantity > 0),
-            createdAt INTEGER NOT NULL,
-            updatedAt INTEGER NOT NULL,
-            FOREIGN KEY(inventoryId) REFERENCES inventory_records(id) ON DELETE CASCADE,
-            FOREIGN KEY(lineId) REFERENCES lines(id) ON DELETE RESTRICT,
-            FOREIGN KEY(sizeId) REFERENCES sizes(id) ON DELETE RESTRICT)''');
-          await db.execute('CREATE INDEX IF NOT EXISTS index_distribution_inventory ON inventory_distributions(inventoryId)');
-        }
-        if (oldVersion < 3) {
-          await db.execute('''CREATE TABLE subdepartments(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            createdAt INTEGER NOT NULL,
-            updatedAt INTEGER NOT NULL)''');
-          final stamp = _now();
-          await db.execute('INSERT INTO subdepartments(name, createdAt, updatedAt) VALUES (?, ?, ?)', ['Algemeen', stamp, stamp]);
-          if (oldVersion < 2) {
-            await db.execute('ALTER TABLE inventory_records RENAME TO inventory_records_legacy');
-            await db.execute('''CREATE TABLE inventory_records(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              plantId INTEGER NOT NULL,
-              departmentId INTEGER NOT NULL,
-              subDepartmentId INTEGER NOT NULL,
-              lineId INTEGER NOT NULL,
-              sizeId INTEGER NOT NULL,
-              quantity INTEGER NOT NULL CHECK(quantity >= 0),
-              isActive INTEGER NOT NULL DEFAULT 1,
-              createdAt INTEGER NOT NULL,
-              updatedAt INTEGER NOT NULL,
-              FOREIGN KEY(plantId) REFERENCES plants(id) ON DELETE RESTRICT,
-              FOREIGN KEY(departmentId) REFERENCES departments(id) ON DELETE RESTRICT,
-              FOREIGN KEY(subDepartmentId) REFERENCES subdepartments(id) ON DELETE RESTRICT,
-              FOREIGN KEY(lineId) REFERENCES lines(id) ON DELETE RESTRICT,
-              FOREIGN KEY(sizeId) REFERENCES sizes(id) ON DELETE RESTRICT)''');
-            await db.execute('''CREATE TABLE inventory_history(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              inventoryId INTEGER NOT NULL,
-              changeAmount INTEGER NOT NULL,
-              action TEXT NOT NULL,
-              createdAt INTEGER NOT NULL,
-              FOREIGN KEY(inventoryId) REFERENCES inventory_records(id) ON DELETE RESTRICT)''');
-            await db.execute('''INSERT INTO inventory_records(
-                plantId, departmentId, subDepartmentId, lineId, sizeId, quantity, isActive, createdAt, updatedAt)
-              SELECT plantId, departmentId, (SELECT id FROM subdepartments WHERE name = 'Algemeen' LIMIT 1), lineId, sizeId, SUM(quantity), 1,
-                     MIN(createdAt), MAX(updatedAt)
-              FROM inventory_records_legacy
-              GROUP BY plantId, departmentId, lineId, sizeId''');
-            await db.execute('''INSERT INTO inventory_history(
-                inventoryId, changeAmount, action, createdAt)
-              SELECT current.id, legacy.quantity,
-                CASE WHEN legacy.id = (
-                  SELECT earliest.id FROM inventory_records_legacy earliest
-                  WHERE earliest.plantId = legacy.plantId
-                    AND earliest.departmentId = legacy.departmentId
-                    AND earliest.lineId = legacy.lineId
-                    AND earliest.sizeId = legacy.sizeId
-                  ORDER BY earliest.createdAt, earliest.id LIMIT 1
-                ) THEN 'created' ELSE 'added' END,
-                legacy.createdAt
-              FROM inventory_records_legacy legacy
-              JOIN inventory_records current
-                ON current.plantId = legacy.plantId
-               AND current.departmentId = legacy.departmentId
-               AND current.lineId = legacy.lineId
-               AND current.sizeId = legacy.sizeId''');
-            await db.execute('DROP TABLE inventory_records_legacy');
-            for (final column in ['plantId', 'departmentId', 'subDepartmentId', 'lineId', 'sizeId']) {
-              await db.execute('CREATE INDEX index_inventory_$column ON inventory_records($column)');
-            }
-            await db.execute('CREATE UNIQUE INDEX index_inventory_position ON inventory_records(plantId, departmentId, subDepartmentId, lineId, sizeId)');
-            await db.execute('CREATE INDEX index_inventory_active ON inventory_records(isActive)');
-            await db.execute('CREATE INDEX index_history_inventory_date ON inventory_history(inventoryId, createdAt DESC)');
-          } else {
-            await db.execute('ALTER TABLE inventory_records ADD COLUMN subDepartmentId INTEGER NOT NULL DEFAULT 0');
-            await db.execute('UPDATE inventory_records SET subDepartmentId = (SELECT id FROM subdepartments WHERE name = ? LIMIT 1)', ['Algemeen']);
-            await db.execute('CREATE INDEX index_inventory_subDepartmentId ON inventory_records(subDepartmentId)');
-            await db.execute('DROP INDEX IF EXISTS index_inventory_position');
-            await db.execute('CREATE UNIQUE INDEX index_inventory_position ON inventory_records(plantId, departmentId, subDepartmentId, lineId, sizeId)');
-            await db.execute('PRAGMA foreign_key_check');
-          }
-        }
-      },
+      onCreate: (db, version) => createSchema(db),
+      onUpgrade: (db, oldVersion, newVersion) =>
+          upgradeSchema(db, oldVersion, newVersion),
     );
     await _importLegacyDatabase();
     await _seedMissingData();
@@ -422,17 +45,20 @@ class AppDatabase {
   }
 
   Future<void> _cleanupDuplicateLines() async {
-    final ids = await database.rawQuery('SELECT DISTINCT inventoryId FROM inventory_distributions');
+    final ids = await database
+        .rawQuery('SELECT DISTINCT inventoryId FROM inventory_distributions');
     final stamp = _now();
     for (final row in ids) {
       final inventoryId = row['inventoryId'] as int;
-      await database.transaction((transaction) => _mergeDuplicateLines(transaction, inventoryId, stamp));
+      await database.transaction((transaction) =>
+          _mergeDuplicateLines(transaction, inventoryId, stamp));
     }
   }
 
   Future<void> _importLegacyDatabase() async {
     if (!canImportLegacyDatabase) return;
-    if (await _count('plants') > 0 || await _count('inventory_records') > 0) return;
+    if (await _count('plants') > 0 || await _count('inventory_records') > 0)
+      return;
     final legacyPath = await applicationDatabasePath('plantregistratie.db');
     if (!await databaseExists(legacyPath)) return;
     Database? legacy;
@@ -443,19 +69,27 @@ class AppDatabase {
       for (final table in tables) {
         content[table] = await legacy.query(table);
       }
-      final oldRecords = await legacy.query('inventory_records', orderBy: 'createdAt, id');
+      final oldRecords =
+          await legacy.query('inventory_records', orderBy: 'createdAt, id');
       await database.transaction((transaction) async {
         for (final table in tables) {
           for (final row in content[table]!) {
-            await transaction.insert(table, Map<String, Object?>.from(row), conflictAlgorithm: ConflictAlgorithm.ignore);
+            await transaction.insert(table, Map<String, Object?>.from(row),
+                conflictAlgorithm: ConflictAlgorithm.ignore);
           }
         }
         for (final row in oldRecords) {
-          final keys = [row['plantId'], row['departmentId'], row['lineId'], row['sizeId']];
+          final keys = [
+            row['plantId'],
+            row['departmentId'],
+            row['lineId'],
+            row['sizeId']
+          ];
           final match = await transaction.query(
             'inventory_records',
             columns: ['id', 'quantity'],
-            where: 'plantId = ? AND departmentId = ? AND lineId = ? AND sizeId = ?',
+            where:
+                'plantId = ? AND departmentId = ? AND lineId = ? AND sizeId = ?',
             whereArgs: keys,
             limit: 1,
           );
@@ -514,7 +148,9 @@ class AppDatabase {
           name = name.substring(1, name.length - 1).replaceAll('""', '"');
         }
         if (name.isNotEmpty) {
-          batch.insert('plants', {'name': name, 'createdAt': stamp, 'updatedAt': stamp}, conflictAlgorithm: ConflictAlgorithm.ignore);
+          batch.insert(
+              'plants', {'name': name, 'createdAt': stamp, 'updatedAt': stamp},
+              conflictAlgorithm: ConflictAlgorithm.ignore);
         }
       }
       await batch.commit(noResult: true);
@@ -522,32 +158,54 @@ class AppDatabase {
     if (await _count('departments') == 0) {
       final text = await rootBundle.loadString('assets/departments.txt');
       final batch = database.batch();
-      for (final name in text.split(RegExp(r'\r?\n')).map((value) => value.trim()).where((value) => value.isNotEmpty)) {
-        batch.insert('departments', {'name': name, 'createdAt': stamp, 'updatedAt': stamp}, conflictAlgorithm: ConflictAlgorithm.ignore);
+      for (final name in text
+          .split(RegExp(r'\r?\n'))
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)) {
+        batch.insert('departments',
+            {'name': name, 'createdAt': stamp, 'updatedAt': stamp},
+            conflictAlgorithm: ConflictAlgorithm.ignore);
       }
       await batch.commit(noResult: true);
     }
     if (await _count('subdepartments') == 0) {
-      await database.insert('subdepartments', {'name': 'Algemeen', 'createdAt': stamp, 'updatedAt': stamp}, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await database.insert('subdepartments',
+          {'name': 'Algemeen', 'createdAt': stamp, 'updatedAt': stamp},
+          conflictAlgorithm: ConflictAlgorithm.ignore);
     }
     if (await _count('lines') == 0) {
       final batch = database.batch();
       for (var number = 1; number <= 10; number++) {
-        batch.insert('lines', {'name': '$number', 'departmentId': null, 'createdAt': stamp, 'updatedAt': stamp});
+        batch.insert('lines', {
+          'name': '$number',
+          'departmentId': null,
+          'createdAt': stamp,
+          'updatedAt': stamp
+        });
       }
       await batch.commit(noResult: true);
     }
     if (await _count('sizes') == 0) {
       final batch = database.batch();
       for (final entry in {'1L': 250, '2L': 150, '5L': 80}.entries) {
-        batch.insert('sizes', {'name': entry.key, 'defaultQuantity': entry.value, 'createdAt': stamp, 'updatedAt': stamp});
+        batch.insert('sizes', {
+          'name': entry.key,
+          'defaultQuantity': entry.value,
+          'createdAt': stamp,
+          'updatedAt': stamp
+        });
       }
       await batch.commit(noResult: true);
     }
     if (await _count('blocks') == 0) {
       final batch = database.batch();
       for (var i = 1; i <= 10; i++) {
-        batch.insert('blocks', {'name': i.toString(), 'multiplier': i, 'createdAt': stamp, 'updatedAt': stamp});
+        batch.insert('blocks', {
+          'name': i.toString(),
+          'multiplier': i,
+          'createdAt': stamp,
+          'updatedAt': stamp
+        });
       }
       await batch.commit(noResult: true);
     }
@@ -555,23 +213,43 @@ class AppDatabase {
 
   Future<List<Choice>> choices(MasterType type, {int? departmentId}) async {
     final where = switch (type) {
-      MasterType.lines => departmentId != null ? '(departmentId IS NULL OR departmentId = ?)' : null,
+      MasterType.lines => departmentId != null
+          ? '(departmentId IS NULL OR departmentId = ?)'
+          : null,
       _ => null,
     };
-    final rows = await database.query(type.table, where: where, whereArgs: where == null ? null : [departmentId], orderBy: 'name COLLATE NOCASE');
-        return rows.map((row) {
-          final defaultQty = row['defaultQuantity'] as int? ?? row['multiplier'] as int?;
-          return Choice(row['id'] as int, row['name'] as String, defaultQuantity: defaultQty);
-        }).toList();
+    final rows = await database.query(type.table,
+        where: where,
+        whereArgs: where == null ? null : [departmentId],
+        orderBy: 'name COLLATE NOCASE');
+    return rows.map((row) {
+      final defaultQty =
+          row['defaultQuantity'] as int? ?? row['multiplier'] as int?;
+      return Choice(row['id'] as int, row['name'] as String,
+          defaultQuantity: defaultQty);
+    }).toList();
   }
 
-  Future<List<InventoryRow>> inventory(String search, InventoryFilter filter, {bool includeDistributions = false}) async {
+  /// Number of active registrations per sub-department, computed in SQL.
+  Future<Map<int, int>> subDepartmentCounts() async {
+    final rows = await database.rawQuery(
+      'SELECT subDepartmentId, COUNT(*) total FROM inventory_records WHERE isActive = 1 GROUP BY subDepartmentId',
+    );
+    return {
+      for (final row in rows)
+        row['subDepartmentId'] as int: (row['total'] as num).toInt(),
+    };
+  }
+
+  Future<List<InventoryRow>> inventory(String search, InventoryFilter filter,
+      {bool includeDistributions = false}) async {
     final where = <String>['r.isActive = 1'];
     if (includeDistributions) where.add('r.quantity > 0');
     final args = <Object?>[];
     final term = search.trim().toLowerCase();
     if (term.isNotEmpty) {
-      where.add('(lower(p.name) LIKE ? OR lower(d.name) LIKE ? OR lower(sd.name) LIKE ? OR lower(l.name) LIKE ? OR lower(s.name) LIKE ?)');
+      where.add(
+          '(lower(p.name) LIKE ? OR lower(d.name) LIKE ? OR lower(sd.name) LIKE ? OR lower(l.name) LIKE ? OR lower(s.name) LIKE ?)');
       args.addAll(List.filled(5, '%$term%'));
     }
     for (final entry in {
@@ -586,7 +264,8 @@ class AppDatabase {
         args.add(entry.value);
       }
     }
-    final source = includeDistributions ? _positionsSource : 'inventory_records';
+    final source =
+        includeDistributions ? _positionsSource : 'inventory_records';
     final rows = await database.rawQuery('''
       SELECT r.id, p.name plant, d.name department, sd.name subDepartment, l.name line, s.name size,
              r.quantity, r.createdAt, r.updatedAt
@@ -602,7 +281,8 @@ class AppDatabase {
     return rows.map(InventoryRow.fromMap).toList();
   }
 
-  Future<Map<int, List<DistributionRow>>> distributionsForIds(List<int> ids) async {
+  Future<Map<int, List<DistributionRow>>> distributionsForIds(
+      List<int> ids) async {
     if (ids.isEmpty) return {};
     final placeholders = List.filled(ids.length, '?').join(',');
     final rows = await database.rawQuery('''
@@ -621,18 +301,34 @@ class AppDatabase {
     return map;
   }
 
-  Future<void> distribute({required int inventoryId, required int lineId, required int sizeId, required int quantity}) async {
-    if (quantity <= 0) throw StateError('Geef een aantal groter dan nul op.');
+  Future<void> distribute(
+      {required int inventoryId,
+      required int lineId,
+      required int sizeId,
+      required int quantity}) async {
+    if (quantity <= 0)
+      throw const DomainException('Geef een aantal groter dan nul op.');
     final stamp = _now();
     await database.transaction((transaction) async {
-      final rows = await transaction.query('inventory_records', columns: ['quantity'], where: 'id = ? AND isActive = 1', whereArgs: [inventoryId], limit: 1);
-      if (rows.isEmpty) throw StateError('Registratie niet gevonden.');
+      final rows = await transaction.query('inventory_records',
+          columns: ['quantity'],
+          where: 'id = ? AND isActive = 1',
+          whereArgs: [inventoryId],
+          limit: 1);
+      if (rows.isEmpty)
+        throw const DomainException('Registratie niet gevonden.');
       final available = rows.first['quantity'] as int;
-      if (quantity > available) throw StateError('Er zijn maar $available planten beschikbaar om te verdelen.');
-      await transaction.update('inventory_records', {
-        'quantity': available - quantity,
-        'updatedAt': stamp,
-      }, where: 'id = ?', whereArgs: [inventoryId]);
+      if (quantity > available)
+        throw DomainException(
+            'Er zijn maar $available planten beschikbaar om te verdelen.');
+      await transaction.update(
+          'inventory_records',
+          {
+            'quantity': available - quantity,
+            'updatedAt': stamp,
+          },
+          where: 'id = ?',
+          whereArgs: [inventoryId]);
       await transaction.insert('inventory_distributions', {
         'inventoryId': inventoryId,
         'lineId': lineId,
@@ -649,16 +345,25 @@ class AppDatabase {
       });
       await _mergeDuplicateLines(transaction, inventoryId, stamp);
     });
+    notifyListeners();
   }
 
   // Ensures each line appears once per card: splits on the original line merge back,
   // and splits sharing a line are summed.
-  Future<void> _mergeDuplicateLines(Transaction transaction, int inventoryId, int stamp) async {
-    final parentRows = await transaction.query('inventory_records', columns: ['lineId', 'quantity'], where: 'id = ?', whereArgs: [inventoryId], limit: 1);
+  Future<void> _mergeDuplicateLines(
+      Transaction transaction, int inventoryId, int stamp) async {
+    final parentRows = await transaction.query('inventory_records',
+        columns: ['lineId', 'quantity'],
+        where: 'id = ?',
+        whereArgs: [inventoryId],
+        limit: 1);
     if (parentRows.isEmpty) return;
     final parentLineId = parentRows.first['lineId'] as int;
     final parentQuantity = parentRows.first['quantity'] as int;
-    final dists = await transaction.query('inventory_distributions', where: 'inventoryId = ?', whereArgs: [inventoryId], orderBy: 'createdAt, id');
+    final dists = await transaction.query('inventory_distributions',
+        where: 'inventoryId = ?',
+        whereArgs: [inventoryId],
+        orderBy: 'createdAt, id');
     final keepByLine = <int, int>{};
     var parentDelta = 0;
     for (final dist in dists) {
@@ -667,41 +372,71 @@ class AppDatabase {
       final quantity = dist['quantity'] as int;
       if (lineId == parentLineId) {
         parentDelta += quantity;
-        await transaction.delete('inventory_distributions', where: 'id = ?', whereArgs: [id]);
+        await transaction.delete('inventory_distributions',
+            where: 'id = ?', whereArgs: [id]);
       } else if (keepByLine.containsKey(lineId)) {
-        await transaction.rawUpdate('UPDATE inventory_distributions SET quantity = quantity + ?, updatedAt = ? WHERE id = ?', [quantity, stamp, keepByLine[lineId]]);
-        await transaction.delete('inventory_distributions', where: 'id = ?', whereArgs: [id]);
+        await transaction.rawUpdate(
+            'UPDATE inventory_distributions SET quantity = quantity + ?, updatedAt = ? WHERE id = ?',
+            [quantity, stamp, keepByLine[lineId]]);
+        await transaction.delete('inventory_distributions',
+            where: 'id = ?', whereArgs: [id]);
       } else {
         keepByLine[lineId] = id;
       }
     }
     if (parentDelta != 0) {
-      await transaction.update('inventory_records', {'quantity': parentQuantity + parentDelta, 'updatedAt': stamp}, where: 'id = ?', whereArgs: [inventoryId]);
+      await transaction.update('inventory_records',
+          {'quantity': parentQuantity + parentDelta, 'updatedAt': stamp},
+          where: 'id = ?', whereArgs: [inventoryId]);
     }
   }
 
-  Future<void> updateDistribution({required int distributionId, required int lineId, required int quantity}) async {
-    if (quantity <= 0) throw StateError('Geef een aantal groter dan nul op.');
+  Future<void> updateDistribution(
+      {required int distributionId,
+      required int lineId,
+      required int quantity}) async {
+    if (quantity <= 0)
+      throw const DomainException('Geef een aantal groter dan nul op.');
     final stamp = _now();
     await database.transaction((transaction) async {
-      final distRows = await transaction.query('inventory_distributions', columns: ['inventoryId', 'quantity'], where: 'id = ?', whereArgs: [distributionId], limit: 1);
-      if (distRows.isEmpty) throw StateError('Verdeling niet gevonden.');
+      final distRows = await transaction.query('inventory_distributions',
+          columns: ['inventoryId', 'quantity'],
+          where: 'id = ?',
+          whereArgs: [distributionId],
+          limit: 1);
+      if (distRows.isEmpty)
+        throw const DomainException('Verdeling niet gevonden.');
       final inventoryId = distRows.first['inventoryId'] as int;
       final oldQuantity = distRows.first['quantity'] as int;
-      final parentRows = await transaction.query('inventory_records', columns: ['quantity'], where: 'id = ? AND isActive = 1', whereArgs: [inventoryId], limit: 1);
-      if (parentRows.isEmpty) throw StateError('Registratie niet gevonden.');
+      final parentRows = await transaction.query('inventory_records',
+          columns: ['quantity'],
+          where: 'id = ? AND isActive = 1',
+          whereArgs: [inventoryId],
+          limit: 1);
+      if (parentRows.isEmpty)
+        throw const DomainException('Registratie niet gevonden.');
       final available = parentRows.first['quantity'] as int;
       final delta = quantity - oldQuantity;
-      if (delta > available) throw StateError('Er zijn maar ${available + oldQuantity} planten beschikbaar om te verdelen.');
-      await transaction.update('inventory_records', {
-        'quantity': available - delta,
-        'updatedAt': stamp,
-      }, where: 'id = ?', whereArgs: [inventoryId]);
-      await transaction.update('inventory_distributions', {
-        'lineId': lineId,
-        'quantity': quantity,
-        'updatedAt': stamp,
-      }, where: 'id = ?', whereArgs: [distributionId]);
+      if (delta > available)
+        throw DomainException(
+            'Er zijn maar ${available + oldQuantity} planten beschikbaar om te verdelen.');
+      await transaction.update(
+          'inventory_records',
+          {
+            'quantity': available - delta,
+            'updatedAt': stamp,
+          },
+          where: 'id = ?',
+          whereArgs: [inventoryId]);
+      await transaction.update(
+          'inventory_distributions',
+          {
+            'lineId': lineId,
+            'quantity': quantity,
+            'updatedAt': stamp,
+          },
+          where: 'id = ?',
+          whereArgs: [distributionId]);
       await transaction.insert('inventory_history', {
         'inventoryId': inventoryId,
         'changeAmount': -delta,
@@ -710,23 +445,37 @@ class AppDatabase {
       });
       await _mergeDuplicateLines(transaction, inventoryId, stamp);
     });
+    notifyListeners();
   }
 
   Future<void> removeDistribution(int distributionId) async {
     final stamp = _now();
     await database.transaction((transaction) async {
-      final distRows = await transaction.query('inventory_distributions', columns: ['inventoryId', 'quantity'], where: 'id = ?', whereArgs: [distributionId], limit: 1);
+      final distRows = await transaction.query('inventory_distributions',
+          columns: ['inventoryId', 'quantity'],
+          where: 'id = ?',
+          whereArgs: [distributionId],
+          limit: 1);
       if (distRows.isEmpty) return;
       final inventoryId = distRows.first['inventoryId'] as int;
       final quantity = distRows.first['quantity'] as int;
-      final parentRows = await transaction.query('inventory_records', columns: ['quantity'], where: 'id = ?', whereArgs: [inventoryId], limit: 1);
+      final parentRows = await transaction.query('inventory_records',
+          columns: ['quantity'],
+          where: 'id = ?',
+          whereArgs: [inventoryId],
+          limit: 1);
       if (parentRows.isEmpty) return;
       final available = parentRows.first['quantity'] as int;
-      await transaction.update('inventory_records', {
-        'quantity': available + quantity,
-        'updatedAt': stamp,
-      }, where: 'id = ?', whereArgs: [inventoryId]);
-      await transaction.delete('inventory_distributions', where: 'id = ?', whereArgs: [distributionId]);
+      await transaction.update(
+          'inventory_records',
+          {
+            'quantity': available + quantity,
+            'updatedAt': stamp,
+          },
+          where: 'id = ?',
+          whereArgs: [inventoryId]);
+      await transaction.delete('inventory_distributions',
+          where: 'id = ?', whereArgs: [distributionId]);
       await transaction.insert('inventory_history', {
         'inventoryId': inventoryId,
         'changeAmount': quantity,
@@ -734,10 +483,12 @@ class AppDatabase {
         'createdAt': stamp,
       });
     });
+    notifyListeners();
   }
 
   Future<InventoryRecordData?> record(int id) async {
-    final rows = await database.query('inventory_records', where: 'id = ? AND isActive = 1', whereArgs: [id], limit: 1);
+    final rows = await database.query('inventory_records',
+        where: 'id = ? AND isActive = 1', whereArgs: [id], limit: 1);
     return rows.isEmpty ? null : InventoryRecordData.fromMap(rows.first);
   }
 
@@ -751,39 +502,72 @@ class AppDatabase {
   }) async {
     final rows = await database.query(
       'inventory_records',
-      where: 'plantId = ? AND departmentId = ? AND subDepartmentId = ? AND lineId = ? AND sizeId = ? AND isActive = 1${excludingId == null ? '' : ' AND id != ?'}',
-      whereArgs: [plantId, departmentId, subDepartmentId, lineId, sizeId, if (excludingId != null) excludingId],
+      where:
+          'plantId = ? AND departmentId = ? AND subDepartmentId = ? AND lineId = ? AND sizeId = ? AND isActive = 1${excludingId == null ? '' : ' AND id != ?'}',
+      whereArgs: [
+        plantId,
+        departmentId,
+        subDepartmentId,
+        lineId,
+        sizeId,
+        if (excludingId != null) excludingId
+      ],
       limit: 1,
     );
     return rows.isEmpty ? null : InventoryRecordData.fromMap(rows.first);
   }
 
-  Future<SaveResult> saveRecord({int? id, required int plantId, required int departmentId, required int subDepartmentId, required int lineId, required int sizeId, required int quantity}) async {
+  Future<SaveResult> saveRecord(
+      {int? id,
+      required int plantId,
+      required int departmentId,
+      required int subDepartmentId,
+      required int lineId,
+      required int sizeId,
+      required int quantity}) async {
     final stamp = _now();
-    return database.transaction((transaction) async {
+    final result = await database.transaction((transaction) async {
       final matches = await transaction.query(
         'inventory_records',
-        where: 'plantId = ? AND departmentId = ? AND subDepartmentId = ? AND lineId = ? AND sizeId = ?${id == null ? '' : ' AND id != ?'}',
-        whereArgs: [plantId, departmentId, subDepartmentId, lineId, sizeId, if (id != null) id],
+        where:
+            'plantId = ? AND departmentId = ? AND subDepartmentId = ? AND lineId = ? AND sizeId = ?${id == null ? '' : ' AND id != ?'}',
+        whereArgs: [
+          plantId,
+          departmentId,
+          subDepartmentId,
+          lineId,
+          sizeId,
+          if (id != null) id
+        ],
         limit: 1,
       );
       if (id == null && matches.isNotEmpty) {
         final target = matches.first;
         final targetId = target['id'] as int;
-        final previous = target['isActive'] == 1 ? target['quantity'] as int : 0;
+        final previous =
+            target['isActive'] == 1 ? target['quantity'] as int : 0;
         final total = previous + quantity;
-        await transaction.update('inventory_records', {
-          'quantity': total,
-          'isActive': 1,
-          'updatedAt': stamp,
-        }, where: 'id = ?', whereArgs: [targetId]);
+        await transaction.update(
+            'inventory_records',
+            {
+              'quantity': total,
+              'isActive': 1,
+              'updatedAt': stamp,
+            },
+            where: 'id = ?',
+            whereArgs: [targetId]);
         await transaction.insert('inventory_history', {
           'inventoryId': targetId,
           'changeAmount': quantity,
           'action': 'added',
           'createdAt': stamp,
         });
-        return SaveResult(id: targetId, previousQuantity: previous, changeAmount: quantity, newQuantity: total, merged: true);
+        return SaveResult(
+            id: targetId,
+            previousQuantity: previous,
+            changeAmount: quantity,
+            newQuantity: total,
+            merged: true);
       }
       if (id == null) {
         final newId = await transaction.insert('inventory_records', {
@@ -803,27 +587,43 @@ class AppDatabase {
           'action': 'created',
           'createdAt': stamp,
         });
-        return SaveResult(id: newId, previousQuantity: 0, changeAmount: quantity, newQuantity: quantity, merged: false);
+        return SaveResult(
+            id: newId,
+            previousQuantity: 0,
+            changeAmount: quantity,
+            newQuantity: quantity,
+            merged: false);
       }
 
       if (matches.isNotEmpty) {
-        throw StateError('Deze voorraadpositie bestaat al. Voeg het aantal via een nieuwe of gekopieerde registratie toe.');
+        throw const DomainException(
+            'Deze voorraadpositie bestaat al. Voeg het aantal via een nieuwe of gekopieerde registratie toe.');
       }
-      final sourceRows = await transaction.query('inventory_records', where: 'id = ? AND isActive = 1', whereArgs: [id], limit: 1);
-      if (sourceRows.isEmpty) throw StateError('Registratie niet gevonden.');
+      final sourceRows = await transaction.query('inventory_records',
+          where: 'id = ? AND isActive = 1', whereArgs: [id], limit: 1);
+      if (sourceRows.isEmpty)
+        throw const DomainException('Registratie niet gevonden.');
       final source = sourceRows.first;
       final previous = source['quantity'] as int;
-      final positionChanged = source['plantId'] != plantId || source['departmentId'] != departmentId || source['subDepartmentId'] != subDepartmentId || source['lineId'] != lineId || source['sizeId'] != sizeId;
+      final positionChanged = source['plantId'] != plantId ||
+          source['departmentId'] != departmentId ||
+          source['subDepartmentId'] != subDepartmentId ||
+          source['lineId'] != lineId ||
+          source['sizeId'] != sizeId;
       final difference = quantity - previous;
-      await transaction.update('inventory_records', {
-        'plantId': plantId,
-        'departmentId': departmentId,
-        'subDepartmentId': subDepartmentId,
-        'lineId': lineId,
-        'sizeId': sizeId,
-        'quantity': quantity,
-        'updatedAt': stamp,
-      }, where: 'id = ?', whereArgs: [id]);
+      await transaction.update(
+          'inventory_records',
+          {
+            'plantId': plantId,
+            'departmentId': departmentId,
+            'subDepartmentId': subDepartmentId,
+            'lineId': lineId,
+            'sizeId': sizeId,
+            'quantity': quantity,
+            'updatedAt': stamp,
+          },
+          where: 'id = ?',
+          whereArgs: [id]);
       if (difference != 0 || positionChanged) {
         await transaction.insert('inventory_history', {
           'inventoryId': id,
@@ -832,21 +632,36 @@ class AppDatabase {
           'createdAt': stamp,
         });
       }
-      return SaveResult(id: id, previousQuantity: previous, changeAmount: difference, newQuantity: quantity, merged: false);
+      return SaveResult(
+          id: id,
+          previousQuantity: previous,
+          changeAmount: difference,
+          newQuantity: quantity,
+          merged: false);
     });
+    notifyListeners();
+    return result;
   }
 
   Future<void> deleteRecord(int id) async {
     await database.transaction((transaction) async {
-      final rows = await transaction.query('inventory_records', columns: ['quantity'], where: 'id = ? AND isActive = 1', whereArgs: [id], limit: 1);
+      final rows = await transaction.query('inventory_records',
+          columns: ['quantity'],
+          where: 'id = ? AND isActive = 1',
+          whereArgs: [id],
+          limit: 1);
       if (rows.isEmpty) return;
       final quantity = rows.first['quantity'] as int;
       final stamp = _now();
-      await transaction.update('inventory_records', {
-        'quantity': 0,
-        'isActive': 0,
-        'updatedAt': stamp,
-      }, where: 'id = ?', whereArgs: [id]);
+      await transaction.update(
+          'inventory_records',
+          {
+            'quantity': 0,
+            'isActive': 0,
+            'updatedAt': stamp,
+          },
+          where: 'id = ?',
+          whereArgs: [id]);
       await transaction.insert('inventory_history', {
         'inventoryId': id,
         'changeAmount': -quantity,
@@ -854,28 +669,34 @@ class AppDatabase {
         'createdAt': stamp,
       });
     });
+    notifyListeners();
   }
 
   Future<int> inventoryTotal(String search, InventoryFilter filter) async {
     final query = await _stockWhere(search, filter);
-    final result = await database.rawQuery('''SELECT COALESCE(SUM(r.quantity), 0) total
+    final result =
+        await database.rawQuery('''SELECT COALESCE(SUM(r.quantity), 0) total
       FROM $_positionsSource r JOIN plants p ON p.id = r.plantId
       ${query.$1}''', query.$2);
     return (result.first['total'] as num?)?.toInt() ?? 0;
   }
 
-  Future<List<PlantInventoryTotal>> inventoryPlantTotals(String search, InventoryFilter filter) async {
+  Future<List<PlantInventoryTotal>> inventoryPlantTotals(
+      String search, InventoryFilter filter) async {
     final query = await _stockWhere(search, filter);
-    final rows = await database.rawQuery('''SELECT r.plantId, p.name plant, SUM(r.quantity) quantity
+    final rows = await database
+        .rawQuery('''SELECT r.plantId, p.name plant, SUM(r.quantity) quantity
       FROM $_positionsSource r JOIN plants p ON p.id = r.plantId
       ${query.$1}
       GROUP BY r.plantId, p.name
       ORDER BY p.name COLLATE NOCASE''', query.$2);
-    return rows.map((row) => PlantInventoryTotal(
-      plantId: row['plantId'] as int,
-      plant: row['plant'] as String,
-      quantity: (row['quantity'] as num).toInt(),
-    )).toList();
+    return rows
+        .map((row) => PlantInventoryTotal(
+              plantId: row['plantId'] as int,
+              plant: row['plant'] as String,
+              quantity: (row['quantity'] as num).toInt(),
+            ))
+        .toList();
   }
 
   static const String _positionsSource = '''(
@@ -886,7 +707,8 @@ class AppDatabase {
     FROM inventory_distributions dist JOIN inventory_records parent ON parent.id = dist.inventoryId WHERE parent.isActive = 1
   )''';
 
-  Future<(String, List<Object?>)> _stockWhere(String search, InventoryFilter filter) async {
+  Future<(String, List<Object?>)> _stockWhere(
+      String search, InventoryFilter filter) async {
     final where = <String>['r.isActive = 1', 'r.quantity > 0'];
     final args = <Object?>[];
     final term = search.trim().toLowerCase();
@@ -919,37 +741,60 @@ class AppDatabase {
     return rows.map(InventoryHistoryEntry.fromMap).toList();
   }
 
-  Future<int> addMaster(MasterType type, String name, {int defaultQuantity = 0}) {
+  Future<int> addMaster(MasterType type, String name,
+      {int defaultQuantity = 0}) async {
     final stamp = _now();
-    return database.insert(type.table, {
-      'name': name.trim(),
-      if (type == MasterType.lines) 'departmentId': null,
-      if (type == MasterType.sizes) 'defaultQuantity': defaultQuantity,
-      if (type == MasterType.blocks) 'multiplier': defaultQuantity,
-      'createdAt': stamp,
-      'updatedAt': stamp,
-    }, conflictAlgorithm: ConflictAlgorithm.abort);
+    final id = await database.insert(
+        type.table,
+        {
+          'name': name.trim(),
+          if (type == MasterType.lines) 'departmentId': null,
+          if (type == MasterType.sizes) 'defaultQuantity': defaultQuantity,
+          if (type == MasterType.blocks) 'multiplier': defaultQuantity,
+          'createdAt': stamp,
+          'updatedAt': stamp,
+        },
+        conflictAlgorithm: ConflictAlgorithm.abort);
+    notifyListeners();
+    return id;
   }
-  
-  Future<void> updateMaster(MasterType type, int id, String name, {int defaultQuantity = 0}) => database.update(type.table, {
-        'name': name.trim(),
-        if (type == MasterType.sizes) 'defaultQuantity': defaultQuantity,
-        if (type == MasterType.blocks) 'multiplier': defaultQuantity,
-        'updatedAt': _now(),
-      }, where: 'id = ?', whereArgs: [id]);
+
+  Future<void> updateMaster(MasterType type, int id, String name,
+      {int defaultQuantity = 0}) async {
+    await database.update(
+        type.table,
+        {
+          'name': name.trim(),
+          if (type == MasterType.sizes) 'defaultQuantity': defaultQuantity,
+          if (type == MasterType.blocks) 'multiplier': defaultQuantity,
+          'updatedAt': _now(),
+        },
+        where: 'id = ?',
+        whereArgs: [id]);
+    notifyListeners();
+  }
 
   Future<void> deleteMaster(MasterType type, int id) async {
     final usageSql = switch (type) {
-      MasterType.plants => 'SELECT COUNT(*) FROM inventory_records WHERE plantId = ?',
-      MasterType.departments => 'SELECT COUNT(*) FROM inventory_records WHERE departmentId = ? OR lineId IN (SELECT id FROM lines WHERE departmentId = ?)',
-      MasterType.subDepartments => 'SELECT COUNT(*) FROM inventory_records WHERE subDepartmentId = ?',
-      MasterType.lines => 'SELECT COUNT(*) FROM inventory_records WHERE lineId = ?',
-      MasterType.sizes => 'SELECT COUNT(*) FROM inventory_records WHERE sizeId = ?',
+      MasterType.plants =>
+        'SELECT COUNT(*) FROM inventory_records WHERE plantId = ?',
+      MasterType.departments =>
+        'SELECT COUNT(*) FROM inventory_records WHERE departmentId = ? OR lineId IN (SELECT id FROM lines WHERE departmentId = ?)',
+      MasterType.subDepartments =>
+        'SELECT COUNT(*) FROM inventory_records WHERE subDepartmentId = ?',
+      MasterType.lines =>
+        'SELECT COUNT(*) FROM inventory_records WHERE lineId = ?',
+      MasterType.sizes =>
+        'SELECT COUNT(*) FROM inventory_records WHERE sizeId = ?',
       MasterType.blocks => 'SELECT 0',
     };
     final args = type == MasterType.departments ? [id, id] : [id];
-    final used = Sqflite.firstIntValue(await database.rawQuery(usageSql, args)) ?? 0;
-    if (used > 0) throw StateError('Dit item wordt gebruikt in bestaande registraties en kan niet worden verwijderd.');
+    final used =
+        Sqflite.firstIntValue(await database.rawQuery(usageSql, args)) ?? 0;
+    if (used > 0)
+      throw const DomainException(
+          'Dit item wordt gebruikt in bestaande registraties en kan niet worden verwijderd.');
     await database.delete(type.table, where: 'id = ?', whereArgs: [id]);
+    notifyListeners();
   }
 }
